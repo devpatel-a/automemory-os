@@ -2,6 +2,8 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
+memories = []
+
 
 @app.get("/")
 def home():
@@ -11,21 +13,17 @@ def home():
     }
 
 
-@app.get("/health")
-def health():
-    return {
-        "status": "Healthy"
-    }
-
-
 @app.get("/memory")
-def memory():
-    return {
-        "memory": "Driver prefers coffee."
-    }
+def get_memories():
+    return memories
 
-@app.get("/info")
-def info():
+
+@app.post("/memory")
+def add_memory():
+    memories.append({
+        "memory": "Driver prefers coffee."
+    })
+
     return {
-        "info": "Information about the memory service."
+        "message": "Memory added successfully."
     }
