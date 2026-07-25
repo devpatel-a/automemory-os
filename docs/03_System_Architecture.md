@@ -62,3 +62,12 @@ Responsible for:
 - AI reasoning
 - Task planning
 - Tool execution
+
+---
+
+## Memory Service Endpoints
+
+- GET /
+- GET /health
+- GET /memory
+- GET /info
