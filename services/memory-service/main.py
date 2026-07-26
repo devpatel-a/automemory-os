@@ -5,7 +5,7 @@ app = FastAPI()
 
 memories = []
 
-# Creates a schema for the memory data using Pydantic's BaseModel. This schema will be used to validate incoming requests to the /memory endpoint.
+
 class Memory(BaseModel):
     memory: str
 
@@ -24,10 +24,8 @@ def get_memories():
 
 
 @app.post("/memory")
-# "FastAPI, expect the request body to match the Memory model."
 def add_memory(memory: Memory):
-    # converts the validated object into a normal Python dictionary before storing it.
-    memories.append(memory.dict())
+    memories.append(memory.model_dump())
 
     return {
         "message": "Memory added successfully.",

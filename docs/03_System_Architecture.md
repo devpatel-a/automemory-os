@@ -76,9 +76,30 @@ Responsible for:
 
 ## Memory Model
 
+The Memory Service accepts incoming memory data through a request body.
+
+### Schema
+
 ```text
 Memory
+│
+└── memory : string
+```
 
-↓
+### Example Request
 
-memory : string
+```json
+{
+  "memory": "Driver prefers coffee after 2 hours of driving."
+}
+```
+
+### Validation
+
+The Memory Service uses **Pydantic** to validate incoming requests.
+
+Rules:
+
+- `memory` is required.
+- `memory` must be a string.
+- Invalid requests return **HTTP 422 Unprocessable Content**.
