@@ -71,3 +71,14 @@ Responsible for:
 - GET /health
 - GET /memory
 - GET /info
+
+---
+
+## Memory Model
+
+```text
+Memory
+
+↓
+
+memory : string
