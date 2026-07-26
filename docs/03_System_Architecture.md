@@ -78,6 +78,8 @@ Responsible for:
 
 The Memory Service accepts incoming memory data through a request body.
 
+---
+
 ### Schema
 
 ```text
@@ -85,6 +87,7 @@ Memory
 │
 └── memory : string
 ```
+---
 
 ### Example Request
 
@@ -93,6 +96,7 @@ Memory
   "memory": "Driver prefers coffee after 2 hours of driving."
 }
 ```
+---
 
 ### Validation
 
@@ -103,3 +107,14 @@ Rules:
 - `memory` is required.
 - `memory` must be a string.
 - Invalid requests return **HTTP 422 Unprocessable Content**.
+
+---
+
+## Memory Service Endpoints
+
+| Method | Endpoint | Purpose |
+|---------|----------|---------|
+| GET | /memory | Retrieve all memories |
+| POST | /memory | Create a new memory |
+| PUT | /memory/{memory_id} | Update a memory |
+| DELETE | /memory/{memory_id} | Delete a memory |
