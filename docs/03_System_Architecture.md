@@ -118,3 +118,14 @@ Rules:
 | POST | /memory | Create a new memory |
 | PUT | /memory/{memory_id} | Update a memory |
 | DELETE | /memory/{memory_id} | Delete a memory |
+
+---
+
+## Memory Service Architecture
+
+The Memory Service is divided into layers:
+
+- **main.py** – Starts the FastAPI application.
+- **routes.py** – Defines API endpoints.
+- **models.py** – Defines request models.
+- **service.py** – Contains business logic.
