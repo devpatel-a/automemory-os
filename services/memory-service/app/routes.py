@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .models import Memory
+from .schemas import MemoryCreate
 from . import service
 
 router = APIRouter()
@@ -12,12 +12,12 @@ def get_memory():
 
 
 @router.post("/memory")
-def create_memory(memory: Memory):
+def create_memory(memory: MemoryCreate):
     return service.add_memory(memory)
 
 
 @router.put("/memory/{memory_id}")
-def update(memory_id: int, memory: Memory):
+def update(memory_id: int, memory: MemoryCreate):
     return service.update_memory(memory_id, memory)
 
 

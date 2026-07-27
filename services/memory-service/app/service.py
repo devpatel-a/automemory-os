@@ -1,4 +1,4 @@
-from .models import Memory
+from .schemas import MemoryCreate
 
 memories = []
 
@@ -7,7 +7,7 @@ def get_memories():
     return memories
 
 
-def add_memory(memory: Memory):
+def add_memory(memory: MemoryCreate):
     memories.append(memory.model_dump())
 
     return {
@@ -16,7 +16,7 @@ def add_memory(memory: Memory):
     }
 
 
-def update_memory(memory_id: int, memory: Memory):
+def update_memory(memory_id: int, memory: MemoryCreate):
     if memory_id >= len(memories):
         return {
             "error": "Memory not found."
