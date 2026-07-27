@@ -26,3 +26,44 @@ def get_memories():
 
     finally:
         db.close()
+
+def update_memory(memory_id: int, memory_text: str):
+    db = SessionLocal()
+
+    try:
+        memory = db.query(Memory).filter(Memory.id == memory_id).first()
+
+        if memory is None:
+            return {"error": "Memory not found."}
+
+        memory.memory = memory_text
+
+        db.commit()
+        db.refresh(memory)
+
+        return {
+            "message": "Memory updated successfully.",
+            "memory": memory
+        }
+
+    finally:
+        db.close()
+
+def delete_memory(memory_id: int):
+    db = SessionLocal()
+
+    try:
+        memory = db.query(Memory).filter(Memory.id == memory_id).first()
+
+        if memory is None:
+            return {"error": "Memory not found."}
+
+        db.delete(memory)
+        db.commit()
+
+        return {
+            "message": "Memory deleted successfully."
+        }
+
+    finally:
+        db.close()
