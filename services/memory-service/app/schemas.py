@@ -1,5 +1,9 @@
 from pydantic import BaseModel
 
 
+from pydantic import BaseModel
+
+
 class MemoryCreate(BaseModel):
-    memory: str
+    content: str
+    category: str

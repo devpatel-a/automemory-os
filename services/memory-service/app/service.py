@@ -2,11 +2,14 @@ from .database import SessionLocal
 from .models import Memory
 
 
-def create_memory(memory_text: str):
+def create_memory(content: str, category: str):
     db = SessionLocal()
 
     try:
-        memory = Memory(memory=memory_text)
+        memory = Memory(
+            content=content,
+            category=category,
+        )
 
         db.add(memory)
         db.commit()

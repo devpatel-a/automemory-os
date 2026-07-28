@@ -13,7 +13,10 @@ def get():
 
 @router.post("/memory")
 def create(memory: MemoryCreate):
-    return service.create_memory(memory.memory)
+    return service.create_memory(
+        memory.content,
+        memory.category,
+    )
 
 
 @router.put("/memory/{memory_id}")
