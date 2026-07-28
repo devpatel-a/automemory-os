@@ -7,21 +7,32 @@ router = APIRouter()
 
 
 @router.get("/memory")
-def get():
-    return service.get_memories()
+def get_memories(
+    category: str | None = None,
+    min_importance: float | None = None,
+    keyword: str | None = None,
+):
+    return service.get_memories(
+        category=category,
+        min_importance=min_importance,
+        keyword=keyword,
+    )
 
 
 @router.post("/memory")
 def create(memory: MemoryCreate):
     return service.create_memory(
-        memory.content,
-        memory.category,
+        content=memory.content,
+        category=memory.category,
     )
 
 
 @router.put("/memory/{memory_id}")
 def update(memory_id: int, memory: MemoryCreate):
-    return service.update_memory(memory_id, memory.memory)
+    return service.update_memory(
+        memory_id=memory_id,
+        content=memory.content,
+    )
 
 
 @router.delete("/memory/{memory_id}")

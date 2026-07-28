@@ -40,3 +40,17 @@ Components:
 - PostgreSQL
 - SQLAlchemy Engine
 - PostgreSQL Driver (psycopg2)
+
+---
+
+## ORM Models
+
+The project now contains two types of models:
+
+### Pydantic Schemas
+
+Used for request and response validation.
+
+### SQLAlchemy Models
+
+Used to map Python classes to PostgreSQL tables.

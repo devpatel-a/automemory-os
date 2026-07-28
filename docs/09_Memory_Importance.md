@@ -26,3 +26,26 @@ Future improvements:
 - Access Count
 - Semantic Similarity
 - Hybrid Ranking
+
+# Memory Access Tracking
+
+Each time a memory is retrieved:
+
+- access_count is incremented.
+- last_accessed is updated.
+
+These metrics help determine which memories are actively used and support future ranking and forgetting strategies.
+
+# Memory Search
+
+The Memory Engine supports filtering by:
+
+- Category
+- Minimum importance
+- Keyword
+
+Multiple filters can be combined to retrieve only the most relevant memories.
+
+Current keyword search uses SQL ILIKE for case-insensitive matching.
+
+Future versions will replace keyword search with semantic vector search.

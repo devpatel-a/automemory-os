@@ -1,5 +1,18 @@
+from sqlalchemy import desc
+
 from .database import SessionLocal
 from .models import Memory
+
+
+def calculate_importance(category: str) -> float:
+    scores = {
+        "profile": 0.95,
+        "preference": 0.80,
+        "habit": 0.70,
+        "event": 0.50,
+    }
+
+    return scores.get(category.lower(), 0.40)
 
 
 def create_memory(content: str, category: str):
@@ -24,15 +37,31 @@ def create_memory(content: str, category: str):
         db.close()
 
 
-from sqlalchemy import desc
-
-
-def get_memories():
+def get_memories(
+    category: str | None = None,
+    min_importance: float | None = None,
+    keyword: str | None = None,
+):
     db = SessionLocal()
 
     try:
+        query = db.query(Memory)
+
+        if category:
+            query = query.filter(Memory.category == category)
+
+        if min_importance is not None:
+            query = query.filter(
+                Memory.importance >= min_importance
+            )
+
+        if keyword:
+            query = query.filter(
+                Memory.content.ilike(f"%{keyword}%")
+            )
+
         memories = (
-            db.query(Memory)
+            query
             .order_by(desc(Memory.importance))
             .all()
         )
@@ -42,33 +71,43 @@ def get_memories():
     finally:
         db.close()
 
-def update_memory(memory_id: int, memory_text: str):
+
+def update_memory(memory_id: int, content: str):
     db = SessionLocal()
 
     try:
-        memory = db.query(Memory).filter(Memory.id == memory_id).first()
+        memory = (
+            db.query(Memory)
+            .filter(Memory.id == memory_id)
+            .first()
+        )
 
         if memory is None:
             return {"error": "Memory not found."}
 
-        memory.memory = memory_text
+        memory.content = content
 
         db.commit()
         db.refresh(memory)
 
         return {
             "message": "Memory updated successfully.",
-            "memory": memory
+            "memory": memory,
         }
 
     finally:
         db.close()
 
+
 def delete_memory(memory_id: int):
     db = SessionLocal()
 
     try:
-        memory = db.query(Memory).filter(Memory.id == memory_id).first()
+        memory = (
+            db.query(Memory)
+            .filter(Memory.id == memory_id)
+            .first()
+        )
 
         if memory is None:
             return {"error": "Memory not found."}
@@ -82,13 +121,3 @@ def delete_memory(memory_id: int):
 
     finally:
         db.close()
-
-def calculate_importance(category: str) -> float:
-    scores = {
-        "profile": 0.95,
-        "preference": 0.80,
-        "habit": 0.70,
-        "event": 0.50,
-    }
-
-    return scores.get(category.lower(), 0.40)
