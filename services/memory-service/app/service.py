@@ -6,9 +6,12 @@ def create_memory(content: str, category: str):
     db = SessionLocal()
 
     try:
+        importance = calculate_importance(category)
+
         memory = Memory(
             content=content,
             category=category,
+            importance=importance,
         )
 
         db.add(memory)
@@ -21,11 +24,20 @@ def create_memory(content: str, category: str):
         db.close()
 
 
+from sqlalchemy import desc
+
+
 def get_memories():
     db = SessionLocal()
 
     try:
-        return db.query(Memory).all()
+        memories = (
+            db.query(Memory)
+            .order_by(desc(Memory.importance))
+            .all()
+        )
+
+        return memories
 
     finally:
         db.close()
@@ -70,3 +82,13 @@ def delete_memory(memory_id: int):
 
     finally:
         db.close()
+
+def calculate_importance(category: str) -> float:
+    scores = {
+        "profile": 0.95,
+        "preference": 0.80,
+        "habit": 0.70,
+        "event": 0.50,
+    }
+
+    return scores.get(category.lower(), 0.40)
