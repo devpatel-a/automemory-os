@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from fastapi import HTTPException
 from sqlalchemy import desc
 
 from .database import SessionLocal
@@ -18,16 +19,36 @@ def calculate_importance(category: str) -> float:
 
 
 def update_memory_state(memory):
-    if memory.access_count < 3:
-        memory.state = "weak"
-    else:
+    if memory.access_count >= 3:
         memory.state = "active"
+    else:
+        memory.state = "weak"
 
 
 def create_memory(content: str, category: str):
     db = SessionLocal()
 
     try:
+        existing_memory = (
+            db.query(Memory)
+            .filter(Memory.content == content)
+            .first()
+        )
+
+        if existing_memory:
+            existing_memory.importance = min(
+                existing_memory.importance + 0.05,
+                1.0,
+            )
+
+            existing_memory.access_count += 1
+            existing_memory.last_accessed = datetime.now(UTC)
+
+            db.commit()
+            db.refresh(existing_memory)
+
+            return existing_memory
+
         importance = calculate_importance(category)
 
         memory = Memory(
@@ -58,7 +79,9 @@ def get_memories(
         query = db.query(Memory)
 
         if category:
-            query = query.filter(Memory.category == category)
+            query = query.filter(
+                Memory.category == category
+            )
 
         if min_importance is not None:
             query = query.filter(
@@ -100,17 +123,18 @@ def update_memory(memory_id: int, content: str):
         )
 
         if memory is None:
-            return {"error": "Memory not found."}
+            raise HTTPException(
+                status_code=404,
+                detail="Memory not found.",
+            )
 
         memory.content = content
+        memory.last_accessed = datetime.now(UTC)
 
         db.commit()
         db.refresh(memory)
 
-        return {
-            "message": "Memory updated successfully.",
-            "memory": memory,
-        }
+        return memory
 
     finally:
         db.close()
@@ -127,7 +151,10 @@ def delete_memory(memory_id: int):
         )
 
         if memory is None:
-            return {"error": "Memory not found."}
+            raise HTTPException(
+                status_code=404,
+                detail="Memory not found.",
+            )
 
         db.delete(memory)
         db.commit()

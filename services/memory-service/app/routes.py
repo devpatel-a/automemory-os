@@ -1,12 +1,19 @@
 from fastapi import APIRouter
 
-from .schemas import MemoryCreate
 from . import service
+from .schemas import (
+    MemoryCreate,
+    MemoryUpdate,
+    MemoryResponse,
+)
 
 router = APIRouter()
 
 
-@router.get("/memory")
+@router.get(
+    "/memory",
+    response_model=list[MemoryResponse],
+)
 def get_memories(
     category: str | None = None,
     min_importance: float | None = None,
@@ -19,7 +26,10 @@ def get_memories(
     )
 
 
-@router.post("/memory")
+@router.post(
+    "/memory",
+    response_model=MemoryResponse,
+)
 def create(memory: MemoryCreate):
     return service.create_memory(
         content=memory.content,
@@ -27,8 +37,11 @@ def create(memory: MemoryCreate):
     )
 
 
-@router.put("/memory/{memory_id}")
-def update(memory_id: int, memory: MemoryCreate):
+@router.put(
+    "/memory/{memory_id}",
+    response_model=MemoryResponse,
+)
+def update(memory_id: int, memory: MemoryUpdate):
     return service.update_memory(
         memory_id=memory_id,
         content=memory.content,
