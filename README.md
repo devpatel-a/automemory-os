@@ -25,7 +25,7 @@ Instead of behaving like a stateless chatbot, it continuously builds long-term m
 
 ## Current Status
 
-**Phase 1 — Memory engine**
+**Phase 1 — Context Engine**
 
 ---
 
@@ -68,7 +68,7 @@ Instead of behaving like a stateless chatbot, it continuously builds long-term m
 - [x] Functional Requirements
 - [x] Backend Foundation
 - [x] Database Layer
-- [ ] Memory Engine
+- [x] Memory Engine
 - [ ] Context Engine
 - [ ] Knowledge Graph
 - [ ] AI Agents
