@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import desc
 
 from .database import SessionLocal
@@ -15,6 +17,13 @@ def calculate_importance(category: str) -> float:
     return scores.get(category.lower(), 0.40)
 
 
+def update_memory_state(memory):
+    if memory.access_count < 3:
+        memory.state = "weak"
+    else:
+        memory.state = "active"
+
+
 def create_memory(content: str, category: str):
     db = SessionLocal()
 
@@ -25,6 +34,7 @@ def create_memory(content: str, category: str):
             content=content,
             category=category,
             importance=importance,
+            state="active",
         )
 
         db.add(memory)
@@ -65,6 +75,13 @@ def get_memories(
             .order_by(desc(Memory.importance))
             .all()
         )
+
+        for memory in memories:
+            memory.access_count += 1
+            memory.last_accessed = datetime.now(UTC)
+            update_memory_state(memory)
+
+        db.commit()
 
         return memories
 

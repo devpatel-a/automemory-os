@@ -18,6 +18,11 @@ class Memory(Base):
 
     access_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    state: Mapped[str] = mapped_column(
+        String(20),
+        default="active",
+    )
+
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
