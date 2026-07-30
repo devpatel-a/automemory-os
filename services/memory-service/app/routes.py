@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from . import service
+from .context_service import build_context
 from .schemas import (
     MemoryCreate,
     MemoryUpdate,
@@ -30,7 +31,7 @@ def get_memories(
     "/memory",
     response_model=MemoryResponse,
 )
-def create(memory: MemoryCreate):
+def create_memory(memory: MemoryCreate):
     return service.create_memory(
         content=memory.content,
         category=memory.category,
@@ -41,7 +42,10 @@ def create(memory: MemoryCreate):
     "/memory/{memory_id}",
     response_model=MemoryResponse,
 )
-def update(memory_id: int, memory: MemoryUpdate):
+def update_memory(
+    memory_id: int,
+    memory: MemoryUpdate,
+):
     return service.update_memory(
         memory_id=memory_id,
         content=memory.content,
@@ -49,5 +53,13 @@ def update(memory_id: int, memory: MemoryUpdate):
 
 
 @router.delete("/memory/{memory_id}")
-def delete(memory_id: int):
+def delete_memory(memory_id: int):
     return service.delete_memory(memory_id)
+
+
+@router.get(
+    "/context",
+    response_model=list[MemoryResponse],
+)
+def get_context(top_k: int = 5):
+    return build_context(top_k)

@@ -6,12 +6,6 @@ from sqlalchemy import desc
 from .database import SessionLocal
 from .models import Memory
 
-def decay_memory(memory):
-    if (
-        memory.importance < 0.5
-        and memory.access_count < 3
-    ):
-        memory.state = "archived"
 
 def calculate_importance(category: str) -> float:
     scores = {
@@ -31,6 +25,14 @@ def update_memory_state(memory):
         memory.state = "weak"
 
 
+def decay_memory(memory):
+    if (
+        memory.importance < 0.5
+        and memory.access_count < 3
+    ):
+        memory.state = "archived"
+
+
 def create_memory(content: str, category: str):
     db = SessionLocal()
 
@@ -46,7 +48,6 @@ def create_memory(content: str, category: str):
                 existing_memory.importance + 0.05,
                 1.0,
             )
-
             existing_memory.access_count += 1
             existing_memory.last_accessed = datetime.now(UTC)
 
@@ -82,9 +83,10 @@ def get_memories(
     db = SessionLocal()
 
     try:
-        query = db.query(Memory).filter(
-            Memory.state != "archived"
-)
+        query = (
+            db.query(Memory)
+            .filter(Memory.state != "archived")
+        )
 
         if category:
             query = query.filter(
@@ -110,14 +112,6 @@ def get_memories(
         for memory in memories:
             memory.access_count += 1
             memory.last_accessed = datetime.now(UTC)
-            update_memory_state(memory)
-            decay_memory(memory)
-
-        db.commit()
-
-        for memory in memories:
-            memory.access_count += 1
-            memory.last_accessed = datetime.now(UTC)
 
             update_memory_state(memory)
             decay_memory(memory)
@@ -130,7 +124,10 @@ def get_memories(
         db.close()
 
 
-def update_memory(memory_id: int, content: str):
+def update_memory(
+    memory_id: int,
+    content: str,
+):
     db = SessionLocal()
 
     try:
@@ -156,13 +153,6 @@ def update_memory(memory_id: int, content: str):
 
     finally:
         db.close()
-
-def decay_memory(memory):
-    if (
-        memory.importance < 0.5
-        and memory.access_count < 3
-    ):
-        memory.state = "archived"
 
 
 def delete_memory(memory_id: int):
