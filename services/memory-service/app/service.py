@@ -6,6 +6,12 @@ from sqlalchemy import desc
 from .database import SessionLocal
 from .models import Memory
 
+def decay_memory(memory):
+    if (
+        memory.importance < 0.5
+        and memory.access_count < 3
+    ):
+        memory.state = "archived"
 
 def calculate_importance(category: str) -> float:
     scores = {
@@ -76,7 +82,9 @@ def get_memories(
     db = SessionLocal()
 
     try:
-        query = db.query(Memory)
+        query = db.query(Memory).filter(
+            Memory.state != "archived"
+)
 
         if category:
             query = query.filter(
@@ -103,6 +111,16 @@ def get_memories(
             memory.access_count += 1
             memory.last_accessed = datetime.now(UTC)
             update_memory_state(memory)
+            decay_memory(memory)
+
+        db.commit()
+
+        for memory in memories:
+            memory.access_count += 1
+            memory.last_accessed = datetime.now(UTC)
+
+            update_memory_state(memory)
+            decay_memory(memory)
 
         db.commit()
 
@@ -138,6 +156,13 @@ def update_memory(memory_id: int, content: str):
 
     finally:
         db.close()
+
+def decay_memory(memory):
+    if (
+        memory.importance < 0.5
+        and memory.access_count < 3
+    ):
+        memory.state = "archived"
 
 
 def delete_memory(memory_id: int):

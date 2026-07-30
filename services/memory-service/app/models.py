@@ -23,6 +23,8 @@ class Memory(Base):
         default="active",
     )
 
+    state: Mapped[str] = mapped_column(default="weak")
+
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
