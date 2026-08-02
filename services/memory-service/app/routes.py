@@ -61,5 +61,11 @@ def delete_memory(memory_id: int):
     "/context",
     response_model=list[MemoryResponse],
 )
-def get_context(top_k: int = 5):
-    return build_context(top_k)
+def get_context(
+    query: str | None = None,
+    top_k: int = 5,
+):
+    return build_context(
+        query=query,
+        top_k=top_k,
+    )
