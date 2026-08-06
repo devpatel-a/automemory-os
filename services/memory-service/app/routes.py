@@ -37,6 +37,9 @@ def create_memory(memory: MemoryCreate):
         category=memory.category,
     )
 
+# TODO:
+# Run contradiction detection
+# before storing memory.
 
 @router.put(
     "/memory/{memory_id}",

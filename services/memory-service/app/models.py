@@ -39,3 +39,7 @@ class Memory(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
+
+    is_contradicted: Mapped[bool] = mapped_column(
+        default=False
+    )
