@@ -5,7 +5,7 @@ from sqlalchemy import desc
 
 from .database import SessionLocal
 from .models import Memory
-
+from .semantic.semantic_service import generate_embedding
 
 def calculate_importance(category: str) -> float:
     scores = {
@@ -58,10 +58,13 @@ def create_memory(content: str, category: str):
 
         importance = calculate_importance(category)
 
+        embedding = generate_embedding(content)
+
         memory = Memory(
             content=content,
             category=category,
             importance=importance,
+            embedding=embedding,
             state="active",
         )
 
