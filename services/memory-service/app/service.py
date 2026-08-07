@@ -5,7 +5,15 @@ from sqlalchemy import desc
 
 from .database import SessionLocal
 from .models import Memory
-from .semantic.semantic_service import generate_embedding
+from .semantic.semantic_service import (
+    generate_embedding,
+    semantic_search,
+)
+from .duplicate_service import (
+    find_duplicate,
+    strengthen_memory,
+)
+
 
 def calculate_importance(category: str) -> float:
     scores = {
@@ -33,10 +41,16 @@ def decay_memory(memory):
         memory.state = "archived"
 
 
-def create_memory(content: str, category: str):
+def create_memory(
+    content: str,
+    category: str,
+):
     db = SessionLocal()
 
     try:
+        # --------------------------------------------------
+        # Exact duplicate detection
+        # --------------------------------------------------
         existing_memory = (
             db.query(Memory)
             .filter(Memory.content == content)
@@ -48,17 +62,49 @@ def create_memory(content: str, category: str):
                 existing_memory.importance + 0.05,
                 1.0,
             )
+
             existing_memory.access_count += 1
             existing_memory.last_accessed = datetime.now(UTC)
+
+            update_memory_state(existing_memory)
+            decay_memory(existing_memory)
 
             db.commit()
             db.refresh(existing_memory)
 
             return existing_memory
 
-        importance = calculate_importance(category)
-
+        # --------------------------------------------------
+        # Generate embedding
+        # --------------------------------------------------
         embedding = generate_embedding(content)
+
+        # --------------------------------------------------
+        # Semantic duplicate detection
+        # --------------------------------------------------
+        candidates = semantic_search(
+            db=db,
+            query=content,
+            limit=5,
+        )
+
+        duplicate = find_duplicate(candidates)
+
+        if duplicate:
+            strengthen_memory(duplicate)
+
+            update_memory_state(duplicate)
+            decay_memory(duplicate)
+
+            db.commit()
+            db.refresh(duplicate)
+
+            return duplicate
+
+        # --------------------------------------------------
+        # Create new memory
+        # --------------------------------------------------
+        importance = calculate_importance(category)
 
         memory = Memory(
             content=content,
@@ -69,6 +115,7 @@ def create_memory(content: str, category: str):
         )
 
         db.add(memory)
+
         db.commit()
         db.refresh(memory)
 
@@ -147,6 +194,7 @@ def update_memory(
             )
 
         memory.content = content
+        memory.embedding = generate_embedding(content)
         memory.last_accessed = datetime.now(UTC)
 
         db.commit()
@@ -175,6 +223,7 @@ def delete_memory(memory_id: int):
             )
 
         db.delete(memory)
+
         db.commit()
 
         return {
