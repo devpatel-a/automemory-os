@@ -25,7 +25,7 @@ Instead of behaving like a stateless chatbot, it continuously builds long-term m
 
 ## Current Status
 
-**Phase 1 — Memory Intelligence**
+**Phase 1 — Memory Intelligence and Knowledge Graph**
 
 ---
 
@@ -73,10 +73,13 @@ Instead of behaving like a stateless chatbot, it continuously builds long-term m
 - [x] Semantic Engine
 - [ ] Memory Intelligence 
 - [ ] Knowledge Graph
+- [ ] Context Optimization
+- [ ] LLM Integration
 - [ ] AI Agents
 - [ ] Vehicle Simulator
 - [ ] Frontend
 - [ ] Deployment
+- [ ] Model Training
 
 ---
 
