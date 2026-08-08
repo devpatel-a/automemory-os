@@ -1,3 +1,41 @@
-psycopg2-binary==2.9.12
-SQLAlchemy==2.0.51
-typing_extensions==4.16.0
+# ----------------------------
+# FastAPI
+# ----------------------------
+fastapi>=0.116.0
+uvicorn[standard]>=0.35.0
+
+# ----------------------------
+# Database
+# ----------------------------
+sqlalchemy>=2.0.43
+psycopg2-binary>=2.9.10
+alembic>=1.16.4
+
+# ----------------------------
+# Validation
+# ----------------------------
+pydantic>=2.11.7
+
+# ----------------------------
+# Vector Database
+# ----------------------------
+pgvector>=0.5.0
+
+# ----------------------------
+# AI / Embeddings
+# ----------------------------
+sentence-transformers>=5.1.0
+transformers>=4.55.0
+torch>=2.8.0
+huggingface-hub>=0.34.0
+
+# ----------------------------
+# Numerical Computing
+# ----------------------------
+numpy>=2.3.2
+scikit-learn>=1.7.1
+
+# ----------------------------
+# Utilities
+# ----------------------------
+python-dotenv>=1.1.1
