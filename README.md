@@ -25,7 +25,7 @@ Instead of behaving like a stateless chatbot, it continuously builds long-term m
 
 ## Current Status
 
-**Phase 1 — Semantic Engine**
+**Phase 1 — Memory Intelligence**
 
 ---
 
@@ -70,7 +70,7 @@ Instead of behaving like a stateless chatbot, it continuously builds long-term m
 - [x] Database Layer
 - [x] Memory Engine
 - [x] Context Engine
-- [ ] Semantic Engine
+- [x] Semantic Engine
 - [ ] Memory Intelligence 
 - [ ] Knowledge Graph
 - [ ] AI Agents
