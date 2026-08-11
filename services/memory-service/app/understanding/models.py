@@ -14,7 +14,5 @@ class TemporalInfo(BaseModel):
 class ParsedMemory(BaseModel):
     content: str
     intent: str
-
     entities: list[Entity]
-
     temporal: list[TemporalInfo]

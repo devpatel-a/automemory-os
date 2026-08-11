@@ -1,19 +1,32 @@
-from app.database import SessionLocal
-from app.relationship_service import (
-    get_related_memories,
+from app.understanding.memory_parser import (
+    parse_memory,
 )
 
-db = SessionLocal()
-
-relationships = get_related_memories(
-    db,
-    1,
+from app.graph.graph_builder import (
+    build_graph,
 )
 
-for relation in relationships:
+examples = [
 
-    print(
-        relation.relationship_type,
-        "->",
-        relation.target_memory_id,
-    )
+    "I like coffee.",
+
+    "I live in Pune.",
+
+    "I study Python.",
+
+    "I own a Tesla.",
+
+]
+
+for sentence in examples:
+
+    print("\n", "=" * 50)
+
+    print(sentence)
+
+    parsed = parse_memory(sentence)
+
+    graph = build_graph(parsed)
+
+    for edge in graph.edges:
+        print(edge)
