@@ -1,7 +1,9 @@
 from app.retrieval_service import retrieve_memories
 
 from app.context.models import ContextCandidate
+
 from app.context.ranker import rank_candidates
+
 from app.context.assembler import assemble_context
 
 from app.context.query_entities import (
@@ -20,11 +22,12 @@ from app.context.temporal_matcher import (
     temporal_match_score,
 )
 
+from app.context.diversity import (
+    diversify_candidates,
+)
+
 
 class ContextEngine:
-    """
-    Coordinates context construction.
-    """
 
     def build_context(
         self,
@@ -74,14 +77,6 @@ class ContextEngine:
                 + temporal_bonus
             )
 
-            print("--------------------------------")
-            print(memory.content)
-            print("Similarity :", similarity)
-            print("Entity Bonus :", entity_bonus)
-            print("Category Bonus :", category_bonus)
-            print("Temporal Bonus :", temporal_bonus)
-            print("Initial Score :", initial_score)
-
             candidates.append(
 
                 ContextCandidate(
@@ -100,9 +95,14 @@ class ContextEngine:
             candidates,
         )
 
+        diversified = diversify_candidates(
+            ranked,
+            limit=5,
+        )
+
         context = assemble_context(
             query,
-            ranked,
+            diversified,
         )
 
         return context
