@@ -6,28 +6,28 @@ from app.context.models import (
 def rank_candidates(
     candidates: list[ContextCandidate],
 ):
+    """
+    Final ranking using all available signals.
+    """
 
     for candidate in candidates:
 
         memory = candidate.memory
 
-        candidate.score = (
+        candidate.score += (
 
-            candidate.similarity * 0.55
-
-            + memory.importance * 0.25
+            memory.importance * 0.25
 
             + min(
                 memory.access_count / 10,
                 1,
-            )
-            * 0.20
+            ) * 0.20
 
         )
 
     candidates.sort(
 
-        key=lambda x: x.score,
+        key=lambda candidate: candidate.score,
 
         reverse=True,
 
