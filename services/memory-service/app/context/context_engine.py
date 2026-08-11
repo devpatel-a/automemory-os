@@ -3,9 +3,22 @@ from app.retrieval_service import retrieve_memories
 from app.context.models import ContextCandidate
 from app.context.ranker import rank_candidates
 from app.context.assembler import assemble_context
-from app.context.query_entities import extract_query_entities
-from app.context.entity_matcher import entity_match_score
-from app.context.category_matcher import category_match_score
+
+from app.context.query_entities import (
+    extract_query_entities,
+)
+
+from app.context.entity_matcher import (
+    entity_match_score,
+)
+
+from app.context.category_matcher import (
+    category_match_score,
+)
+
+from app.context.temporal_matcher import (
+    temporal_match_score,
+)
 
 
 class ContextEngine:
@@ -19,10 +32,6 @@ class ContextEngine:
         query: str,
     ):
 
-        # ---------------------------------
-        # Understand Query
-        # ---------------------------------
-
         query_entities = extract_query_entities(
             query,
         )
@@ -33,10 +42,6 @@ class ContextEngine:
             print(entity)
 
         print("==========================\n")
-
-        # ---------------------------------
-        # Semantic Retrieval
-        # ---------------------------------
 
         results = retrieve_memories(
             db,
@@ -57,10 +62,16 @@ class ContextEngine:
                 memory.category,
             )
 
+            temporal_bonus = temporal_match_score(
+                query,
+                memory.content,
+            )
+
             initial_score = (
                 similarity
                 + entity_bonus
                 + category_bonus
+                + temporal_bonus
             )
 
             print("--------------------------------")
@@ -68,6 +79,7 @@ class ContextEngine:
             print("Similarity :", similarity)
             print("Entity Bonus :", entity_bonus)
             print("Category Bonus :", category_bonus)
+            print("Temporal Bonus :", temporal_bonus)
             print("Initial Score :", initial_score)
 
             candidates.append(
@@ -84,17 +96,9 @@ class ContextEngine:
 
             )
 
-        # ---------------------------------
-        # Rank Candidates
-        # ---------------------------------
-
         ranked = rank_candidates(
             candidates,
         )
-
-        # ---------------------------------
-        # Assemble Context
-        # ---------------------------------
 
         context = assemble_context(
             query,
