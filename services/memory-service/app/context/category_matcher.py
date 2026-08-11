@@ -1,4 +1,16 @@
+CATEGORY_MATCH_WEIGHT = 0.15
+
+
 CATEGORY_KEYWORDS = {
+
+    "profile": [
+        "name",
+        "who",
+        "age",
+        "live",
+        "location",
+    ],
+
     "preference": [
         "like",
         "love",
@@ -7,33 +19,29 @@ CATEGORY_KEYWORDS = {
         "drink",
         "eat",
     ],
-    "profile": [
-        "name",
-        "who",
-        "live",
-        "age",
-        "location",
-    ],
+
     "habit": [
         "daily",
-        "habit",
-        "usually",
         "every",
         "routine",
+        "habit",
+        "usually",
     ],
+
     "event": [
-        "yesterday",
         "today",
+        "yesterday",
         "tomorrow",
         "last",
         "next",
     ],
+
 }
 
 
 def category_match_score(
     query: str,
-    memory_category: str,
+    category: str,
 ) -> float:
     """
     Reward memories whose category
@@ -42,13 +50,12 @@ def category_match_score(
 
     query = query.lower()
 
-    keywords = CATEGORY_KEYWORDS.get(
-        memory_category.lower(),
+    for keyword in CATEGORY_KEYWORDS.get(
+        category,
         [],
-    )
+    ):
 
-    for keyword in keywords:
         if keyword in query:
-            return 0.15
+            return CATEGORY_MATCH_WEIGHT
 
     return 0.0

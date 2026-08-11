@@ -1,21 +1,34 @@
-from app.models import Memory
+from app.context.models import ContextCandidate
+
+
+IMPORTANCE_WEIGHT = 0.25
+
+ACCESS_WEIGHT = 0.20
 
 
 def calculate_context_score(
-    memory: Memory,
-    similarity: float,
+    candidate: ContextCandidate,
 ) -> float:
     """
-    Combine multiple signals into one score.
+    Final ranking score for a
+    retrieved memory.
     """
 
-    importance = memory.importance
-    accesses = min(memory.access_count / 10.0, 1.0)
+    memory = candidate.memory
 
-    score = (
-        similarity * 0.60
-        + importance * 0.30
-        + accesses * 0.10
+    score = candidate.score
+
+    score += memory.importance * IMPORTANCE_WEIGHT
+
+    score += (
+
+        min(
+            memory.access_count / 10,
+            1,
+        )
+
+        * ACCESS_WEIGHT
+
     )
 
-    return round(score, 4)
+    return score

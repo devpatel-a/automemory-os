@@ -6,63 +6,38 @@ from app.context.context_models import (
 def build_prompt(
     context: ContextPackage,
 ) -> str:
+    """
+    Convert a ContextPackage into a
+    prompt for the LLM.
+    """
 
-    prompt = []
+    sections = []
 
-    prompt.append(
-        "Relevant User Context\n"
+    sections.append(
+        f"User Query:\n{context.query}\n"
     )
 
-    if context.profile:
+    groups = [
+        ("Profile", context.profile),
+        ("Preferences", context.preferences),
+        ("Habits", context.habits),
+        ("Events", context.events),
+        ("Other", context.other),
+    ]
 
-        prompt.append(
-            "\nProfile\n-------"
-        )
+    for title, memories in groups:
 
-        for item in context.profile:
-            prompt.append(
-                f"- {item}"
+        if not memories:
+            continue
+
+        sections.append(f"{title}:")
+
+        for memory in memories:
+
+            sections.append(
+                f"- {memory}"
             )
 
-    if context.preferences:
+        sections.append("")
 
-        prompt.append(
-            "\nPreferences\n-----------"
-        )
-
-        for item in context.preferences:
-            prompt.append(
-                f"- {item}"
-            )
-
-    if context.habits:
-
-        prompt.append(
-            "\nHabits\n------"
-        )
-
-        for item in context.habits:
-            prompt.append(
-                f"- {item}"
-            )
-
-    if context.events:
-
-        prompt.append(
-            "\nEvents\n------"
-        )
-
-        for item in context.events:
-            prompt.append(
-                f"- {item}"
-            )
-
-    prompt.append(
-        "\nUser Query\n----------"
-    )
-
-    prompt.append(
-        context.query
-    )
-
-    return "\n".join(prompt)
+    return "\n".join(sections).strip()

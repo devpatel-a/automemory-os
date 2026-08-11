@@ -19,8 +19,8 @@ TIME_PATTERNS = {
     ],
 
     "relative": [
-        r"\byesterday\b",
         r"\btoday\b",
+        r"\byesterday\b",
         r"\btomorrow\b",
         r"\blast week\b",
         r"\bnext week\b",
@@ -29,16 +29,21 @@ TIME_PATTERNS = {
 
     "time_of_day": [
         r"\bmorning\b",
-        r"\bevening\b",
         r"\bafternoon\b",
+        r"\bevening\b",
         r"\bnight\b",
     ],
+
 }
 
 
 def extract_temporal_information(
     text: str,
 ):
+    """
+    Extract temporal expressions
+    using regular expressions.
+    """
 
     sentence = text.lower()
 
@@ -55,12 +60,13 @@ def extract_temporal_information(
 
             if match:
 
-                temporal.append({
+                temporal.append(
 
-                    "category": category,
+                    {
+                        "category": category,
+                        "value": match.group(),
+                    }
 
-                    "value": match.group(),
-
-                })
+                )
 
     return temporal

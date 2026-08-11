@@ -2,35 +2,31 @@ from app.context.models import (
     ContextCandidate,
 )
 
+from app.context.scoring import (
+    calculate_context_score,
+)
+
 
 def rank_candidates(
     candidates: list[ContextCandidate],
-):
+) -> list[ContextCandidate]:
     """
-    Final ranking using all available signals.
+    Rank candidates by their
+    final retrieval score.
     """
 
     for candidate in candidates:
 
-        memory = candidate.memory
-
-        candidate.score += (
-
-            memory.importance * 0.25
-
-            + min(
-                memory.access_count / 10,
-                1,
-            ) * 0.20
-
+        candidate.score = calculate_context_score(
+            candidate,
         )
 
-    candidates.sort(
+    return sorted(
+
+        candidates,
 
         key=lambda candidate: candidate.score,
 
         reverse=True,
 
     )
-
-    return candidates

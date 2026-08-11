@@ -1,23 +1,80 @@
 from app.understanding.models import Entity
 
 MEMORY_KEYWORDS = {
+
+    # ---------------- Drinks ----------------
+
     "coffee": "drink",
     "tea": "drink",
+    "cappuccino": "drink",
+    "espresso": "drink",
+    "latte": "drink",
+    "americano": "drink",
+    "mocha": "drink",
+    "macchiato": "drink",
+
+    # ---------------- Places ----------------
+
+    "cafe": "place",
+    "café": "place",
+    "starbucks": "place",
+    "restaurant": "place",
+    "office": "place",
+    "home": "place",
+    "school": "place",
+    "college": "place",
+
+    # ---------------- Technology ----------------
+
     "python": "technology",
     "fastapi": "technology",
     "postgresql": "technology",
+    "docker": "technology",
+    "kubernetes": "technology",
+    "langgraph": "technology",
+    "langchain": "technology",
+    "rag": "technology",
+    "llm": "technology",
+
+    # ---------------- Vehicles ----------------
+
     "tesla": "vehicle",
+    "car": "vehicle",
+    "bike": "vehicle",
+
+    # ---------------- Preferences ----------------
+
     "dark mode": "preference",
-    "linux": "technology",
+    "light mode": "preference",
+
+    # ---------------- Devices ----------------
+
     "macbook": "device",
+    "iphone": "device",
+    "ipad": "device",
+    "laptop": "device",
+
+    # ---------------- Activities ----------------
+
     "gym": "activity",
+    "running": "activity",
+    "reading": "activity",
+    "coding": "activity",
+
+    # ---------------- Sports ----------------
+
     "football": "sport",
+    "cricket": "sport",
+    "tennis": "sport",
 }
 
 
-def extract_memory_entities(text: str) -> list[Entity]:
+def extract_memory_entities(
+    text: str,
+) -> list[Entity]:
     """
-    Extract memory-specific concepts.
+    Extract memory-specific entities
+    using keyword matching.
     """
 
     entities = []
@@ -29,10 +86,12 @@ def extract_memory_entities(text: str) -> list[Entity]:
         if keyword in lower:
 
             entities.append(
+
                 Entity(
                     text=keyword,
                     label=label,
                 )
+
             )
 
     return entities

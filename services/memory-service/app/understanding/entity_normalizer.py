@@ -5,24 +5,29 @@ def normalize_entities(
     entities: list[Entity],
 ) -> list[Entity]:
     """
-    Remove duplicate entities while preserving order.
+    Remove duplicate entities while
+    preserving insertion order.
     """
 
-    seen = set()
-
     normalized = []
+
+    seen = set()
 
     for entity in entities:
 
         key = (
+
             entity.text.lower(),
+
             entity.label.lower(),
+
         )
 
-        if key not in seen:
+        if key in seen:
+            continue
 
-            seen.add(key)
+        seen.add(key)
 
-            normalized.append(entity)
+        normalized.append(entity)
 
     return normalized

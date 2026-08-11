@@ -1,15 +1,30 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ContextPackage(BaseModel):
+    """
+    Final structured context returned by
+    the Context Engine.
+    """
+
     query: str
 
-    profile: list[str] = []
+    profile: list[str] = Field(
+        default_factory=list
+    )
 
-    preferences: list[str] = []
+    preferences: list[str] = Field(
+        default_factory=list
+    )
 
-    habits: list[str] = []
+    habits: list[str] = Field(
+        default_factory=list
+    )
 
-    events: list[str] = []
+    events: list[str] = Field(
+        default_factory=list
+    )
 
-    other: list[str] = []
+    other: list[str] = Field(
+        default_factory=list
+    )

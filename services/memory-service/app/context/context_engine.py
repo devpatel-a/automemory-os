@@ -1,10 +1,10 @@
-from app.retrieval_service import retrieve_memories
+from app.retrieval_service import (
+    retrieve_memories,
+)
 
-from app.context.models import ContextCandidate
-
-from app.context.ranker import rank_candidates
-
-from app.context.assembler import assemble_context
+from app.context.models import (
+    ContextCandidate,
+)
 
 from app.context.query_entities import (
     extract_query_entities,
@@ -22,12 +22,28 @@ from app.context.temporal_matcher import (
     temporal_match_score,
 )
 
+from app.context.ranker import (
+    rank_candidates,
+)
+
 from app.context.diversity import (
     diversify_candidates,
 )
 
+from app.context.token_budget import (
+    optimize_token_budget,
+)
+
+from app.context.assembler import (
+    assemble_context,
+)
+
 
 class ContextEngine:
+    """
+    Main orchestration layer for
+    intelligent context retrieval.
+    """
 
     def build_context(
         self,
@@ -35,23 +51,28 @@ class ContextEngine:
         query: str,
     ):
 
+        # --------------------------
+        # Understand Query
+        # --------------------------
+
         query_entities = extract_query_entities(
             query,
         )
 
-        print("\n===== Query Entities =====")
-
-        for entity in query_entities:
-            print(entity)
-
-        print("==========================\n")
+        # --------------------------
+        # Semantic Retrieval
+        # --------------------------
 
         results = retrieve_memories(
-            db,
-            query,
+            db=db,
+            query=query,
         )
 
         candidates = []
+
+        # --------------------------
+        # Initial Scoring
+        # --------------------------
 
         for memory, similarity in results:
 
@@ -70,7 +91,7 @@ class ContextEngine:
                 memory.content,
             )
 
-            initial_score = (
+            score = (
                 similarity
                 + entity_bonus
                 + category_bonus
@@ -85,24 +106,43 @@ class ContextEngine:
 
                     similarity=similarity,
 
-                    score=initial_score,
+                    score=score,
 
                 )
 
             )
 
+        # --------------------------
+        # Final Ranking
+        # --------------------------
+
         ranked = rank_candidates(
             candidates,
         )
 
+        # --------------------------
+        # Diversity
+        # --------------------------
+
         diversified = diversify_candidates(
             ranked,
-            limit=5,
+            limit=10,
         )
 
-        context = assemble_context(
-            query,
+        # --------------------------
+        # Token Budget
+        # --------------------------
+
+        optimized = optimize_token_budget(
             diversified,
+            max_characters=1200,
         )
 
-        return context
+        # --------------------------
+        # Context Package
+        # --------------------------
+
+        return assemble_context(
+            query=query,
+            candidates=optimized,
+        )

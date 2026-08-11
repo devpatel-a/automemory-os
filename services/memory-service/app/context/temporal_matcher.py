@@ -1,20 +1,19 @@
-TEMPORAL_KEYWORDS = {
-    "today": [
-        "today",
-    ],
-    "yesterday": [
-        "yesterday",
-    ],
-    "tomorrow": [
-        "tomorrow",
-    ],
-    "last": [
-        "last",
-    ],
-    "next": [
-        "next",
-    ],
-}
+TEMPORAL_MATCH_WEIGHT = 0.15
+
+
+TEMPORAL_WORDS = [
+
+    "today",
+
+    "yesterday",
+
+    "tomorrow",
+
+    "last",
+
+    "next",
+
+]
 
 
 def temporal_match_score(
@@ -22,24 +21,20 @@ def temporal_match_score(
     memory_content: str,
 ) -> float:
     """
-    Reward memories that contain
-    the same temporal expressions
-    as the user query.
+    Reward memories that share
+    temporal expressions with
+    the query.
     """
 
     query = query.lower()
+
     memory = memory_content.lower()
 
     score = 0.0
 
-    for keywords in TEMPORAL_KEYWORDS.values():
+    for word in TEMPORAL_WORDS:
 
-        for keyword in keywords:
-
-            if (
-                keyword in query
-                and keyword in memory
-            ):
-                score += 0.15
+        if word in query and word in memory:
+            score += TEMPORAL_MATCH_WEIGHT
 
     return score

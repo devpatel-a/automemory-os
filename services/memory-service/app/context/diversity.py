@@ -8,8 +8,7 @@ def diversify_candidates(
     limit: int = 5,
 ) -> list[ContextCandidate]:
     """
-    Keep only one memory with identical content.
-    Prevent duplicate context.
+    Remove duplicate memories.
     """
 
     selected = []
@@ -19,9 +18,13 @@ def diversify_candidates(
     for candidate in candidates:
 
         content = (
+
             candidate.memory.content
+
             .strip()
+
             .lower()
+
         )
 
         if content in seen:

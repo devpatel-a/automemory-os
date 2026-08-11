@@ -10,39 +10,58 @@ class MemoryIntent(str, Enum):
     UNKNOWN = "unknown"
 
 
-def detect_intent(text: str) -> MemoryIntent:
+PREFERENCE_KEYWORDS = {
+    "like",
+    "love",
+    "prefer",
+    "favorite",
+    "enjoy",
+}
+
+HABIT_KEYWORDS = {
+    "every",
+    "daily",
+    "usually",
+    "always",
+    "often",
+}
+
+EVENT_KEYWORDS = {
+    "visited",
+    "went",
+    "bought",
+    "moved",
+    "travelled",
+    "traveled",
+}
+
+PROFILE_KEYWORDS = {
+    "my name is",
+    "i am",
+    "i'm",
+}
+
+
+def detect_intent(
+    text: str,
+) -> MemoryIntent:
+    """
+    Detect the intent/category of
+    a user memory.
+    """
 
     sentence = text.lower()
 
-    if any(word in sentence for word in [
-        "like",
-        "love",
-        "prefer",
-        "favorite",
-    ]):
+    if any(keyword in sentence for keyword in PROFILE_KEYWORDS):
+        return MemoryIntent.PROFILE
+
+    if any(keyword in sentence for keyword in PREFERENCE_KEYWORDS):
         return MemoryIntent.PREFERENCE
 
-    if any(word in sentence for word in [
-        "every",
-        "usually",
-        "always",
-        "often",
-    ]):
+    if any(keyword in sentence for keyword in HABIT_KEYWORDS):
         return MemoryIntent.HABIT
 
-    if any(word in sentence for word in [
-        "bought",
-        "visited",
-        "went",
-        "moved",
-    ]):
+    if any(keyword in sentence for keyword in EVENT_KEYWORDS):
         return MemoryIntent.EVENT
-
-    if any(word in sentence for word in [
-        "my name is",
-        "i am",
-        "i'm",
-    ]):
-        return MemoryIntent.PROFILE
 
     return MemoryIntent.FACT

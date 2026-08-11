@@ -24,40 +24,44 @@ from app.understanding.models import (
 )
 
 
-def parse_memory(text: str) -> ParsedMemory:
+def parse_memory(
+    text: str,
+) -> ParsedMemory:
     """
-    Parse a raw user memory into a structured representation.
-
-    Pipeline:
-    1. Extract named entities using spaCy.
-    2. Extract memory-specific entities (coffee, Python, Tesla, etc.).
-    3. Merge both entity lists.
-    4. Detect user intent.
-    5. Extract temporal information.
-    6. Return a ParsedMemory object.
+    Parse raw text into a structured
+    ParsedMemory object.
     """
 
-    # Named entities from spaCy
+    # Named entities
     spacy_entities = extract_entities(text)
 
-    # Memory-specific entities
+    # Domain entities
     memory_entities = extract_memory_entities(text)
 
-    # Merge entities
+    # Merge & deduplicate
     entities = normalize_entities(
         spacy_entities + memory_entities
     )
 
-    # Temporal information
+    # Temporal expressions
     temporal = [
+
         TemporalInfo(**item)
-        for item in extract_temporal_information(text)
+
+        for item in extract_temporal_information(
+            text
+        )
+
     ]
 
-    # Return parsed memory
     return ParsedMemory(
+
         content=text,
+
         intent=detect_intent(text).value,
+
         entities=entities,
+
         temporal=temporal,
+
     )
