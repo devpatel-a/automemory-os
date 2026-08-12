@@ -10,9 +10,10 @@ from app.graph.relationship_detector import (
 
 def build_graph(
     parsed_memory,
+    memory_id: int | None = None,
 ) -> KnowledgeGraph:
     """
-    Build a KnowledgeGraph from ParsedMemory.
+    Build a graph from ParsedMemory.
     """
 
     nodes = []
@@ -29,17 +30,12 @@ def build_graph(
         seen.add(node_id)
 
         nodes.append(
-
             GraphNode(
-
                 id=node_id,
-
                 label=entity.text,
-
                 type=entity.label,
-
+                memory_ids=[] if memory_id is None else [memory_id],
             )
-
         )
 
     edges = detect_relationships(
@@ -47,9 +43,6 @@ def build_graph(
     )
 
     return KnowledgeGraph(
-
         nodes=nodes,
-
         edges=edges,
-
     )

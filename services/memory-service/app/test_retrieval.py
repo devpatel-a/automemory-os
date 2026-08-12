@@ -1,12 +1,22 @@
 from app.database import SessionLocal
-from app.semantic.semantic_service import semantic_search
+
+from app.retrieval_service import retrieve_memories
 
 db = SessionLocal()
 
-results = semantic_search(
+results = retrieve_memories(
     db,
     "I like beverages",
 )
 
-for result in results:
-    print(result)
+print()
+
+print("===== Retrieval Results =====")
+
+for memory, score in results:
+
+    print()
+
+    print(memory.content)
+
+    print(score)

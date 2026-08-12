@@ -8,15 +8,16 @@ def retrieve_memories(
     limit: int = 5,
 ):
     """
-    Central retrieval entry point.
+    Central retrieval API.
 
-    Currently performs semantic retrieval.
+    Current sources:
+        • Semantic Search
 
-    Future versions will merge:
-    - Semantic Retrieval
-    - Graph Retrieval
+    Future sources:
+        • Knowledge Graph
+        • Hybrid Retrieval
 
-    without changing the public API.
+    The public API will remain unchanged.
     """
 
     semantic_results = semantic_search(
@@ -25,11 +26,11 @@ def retrieve_memories(
         limit=20,
     )
 
-    candidates = []
+    ranked = []
 
     for memory, distance in semantic_results:
 
-        candidates.append(
+        ranked.append(
             {
                 "memory": memory,
                 "distance": distance,
@@ -41,15 +42,15 @@ def retrieve_memories(
             }
         )
 
-    candidates.sort(
+    ranked.sort(
         key=lambda item: item["score"],
         reverse=True,
     )
 
     return [
         (
-            candidate["memory"],
-            candidate["score"],
+            item["memory"],
+            item["score"],
         )
-        for candidate in candidates[:limit]
+        for item in ranked[:limit]
     ]

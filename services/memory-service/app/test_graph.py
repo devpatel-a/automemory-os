@@ -1,32 +1,31 @@
-from app.understanding.memory_parser import (
-    parse_memory,
-)
+from app.understanding.memory_parser import parse_memory
+from app.graph.graph_service import GraphService
 
-from app.graph.graph_builder import (
-    build_graph,
-)
+graph = GraphService()
 
 examples = [
-
-    "I like coffee.",
-
-    "I live in Pune.",
-
-    "I study Python.",
-
-    "I own a Tesla.",
-
+    ("I like coffee.", 1),
+    ("Coffee is amazing.", 2),
+    ("I live in Pune.", 3),
 ]
 
-for sentence in examples:
+for text, memory_id in examples:
 
-    print("\n", "=" * 50)
+    parsed = parse_memory(text)
 
-    print(sentence)
+    graph.process_memory(
+        parsed,
+        memory_id,
+    )
 
-    parsed = parse_memory(sentence)
+knowledge_graph = graph.repository.load()
 
-    graph = build_graph(parsed)
+print("\nNodes")
 
-    for edge in graph.edges:
-        print(edge)
+for node in knowledge_graph.nodes:
+    print(node)
+
+print("\nEdges")
+
+for edge in knowledge_graph.edges:
+    print(edge)

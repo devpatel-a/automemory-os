@@ -1,10 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GraphNode(BaseModel):
     id: str
     label: str
     type: str
+
+    # IDs of memories that mention this node.
+    memory_ids: list[int] = Field(default_factory=list)
 
 
 class GraphEdge(BaseModel):
@@ -17,22 +20,25 @@ class KnowledgeGraph(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
 
-    def find_node(self, node_id: str) -> GraphNode | None:
-        """
-        Find a node by its ID.
-        """
+    def find_node(
+        self,
+        node_id: str,
+    ) -> GraphNode | None:
+
         node_id = node_id.lower()
 
         for node in self.nodes:
+
             if node.id.lower() == node_id:
                 return node
 
         return None
 
-    def neighbors(self, node_id: str) -> list[str]:
-        """
-        Return IDs of directly connected nodes.
-        """
+    def neighbors(
+        self,
+        node_id: str,
+    ) -> list[str]:
+
         node_id = node_id.lower()
 
         results = []
@@ -51,14 +57,11 @@ class KnowledgeGraph(BaseModel):
         self,
         entities: list[str],
     ) -> list[str]:
-        """
-        Expand a list of entities using one-hop graph traversal.
-        """
 
-        expanded = set(
+        expanded = {
             entity.lower()
             for entity in entities
-        )
+        }
 
         queue = list(expanded)
 
