@@ -5,10 +5,12 @@ from sqlalchemy import desc
 
 from .database import SessionLocal
 from .models import Memory
+
 from .semantic.semantic_service import (
     generate_embedding,
     semantic_search,
 )
+
 from .duplicate_service import (
     find_duplicate,
     strengthen_memory,
@@ -26,14 +28,16 @@ def calculate_importance(category: str) -> float:
     return scores.get(category.lower(), 0.40)
 
 
-def update_memory_state(memory):
+def update_memory_state(memory: Memory):
+
     if memory.access_count >= 3:
         memory.state = "active"
     else:
         memory.state = "weak"
 
 
-def decay_memory(memory):
+def decay_memory(memory: Memory):
+
     if (
         memory.importance < 0.5
         and memory.access_count < 3
@@ -45,83 +49,112 @@ def create_memory(
     content: str,
     category: str,
 ):
+    """
+    Store or reinforce a memory.
+
+    This function is intentionally responsible
+    only for persistence-related logic.
+
+    Workflow orchestration belongs to
+    MemoryPipeline.
+    """
+
     db = SessionLocal()
 
     try:
-        # --------------------------------------------------
-        # Exact duplicate detection
-        # --------------------------------------------------
-        existing_memory = (
+
+        existing = (
             db.query(Memory)
-            .filter(Memory.content == content)
+            .filter(
+                Memory.content == content
+            )
             .first()
         )
 
-        if existing_memory:
-            existing_memory.importance = min(
-                existing_memory.importance + 0.05,
+        if existing:
+
+            existing.importance = min(
+                existing.importance + 0.05,
                 1.0,
             )
 
-            existing_memory.access_count += 1
-            existing_memory.last_accessed = datetime.now(UTC)
+            existing.access_count += 1
 
-            update_memory_state(existing_memory)
-            decay_memory(existing_memory)
+            existing.last_accessed = datetime.now(
+                UTC
+            )
+
+            update_memory_state(existing)
+
+            decay_memory(existing)
 
             db.commit()
-            db.refresh(existing_memory)
 
-            return existing_memory
+            db.refresh(existing)
 
-        # --------------------------------------------------
-        # Generate embedding
-        # --------------------------------------------------
-        embedding = generate_embedding(content)
+            return existing
 
-        # --------------------------------------------------
-        # Semantic duplicate detection
-        # --------------------------------------------------
+        embedding = generate_embedding(
+            content
+        )
+
         candidates = semantic_search(
             db=db,
             query=content,
             limit=5,
         )
 
-        duplicate = find_duplicate(candidates)
+        duplicate = find_duplicate(
+            candidates
+        )
 
         if duplicate:
-            strengthen_memory(duplicate)
 
-            update_memory_state(duplicate)
-            decay_memory(duplicate)
+            strengthen_memory(
+                duplicate
+            )
+
+            update_memory_state(
+                duplicate
+            )
+
+            decay_memory(
+                duplicate
+            )
 
             db.commit()
-            db.refresh(duplicate)
+
+            db.refresh(
+                duplicate
+            )
 
             return duplicate
 
-        # --------------------------------------------------
-        # Create new memory
-        # --------------------------------------------------
-        importance = calculate_importance(category)
-
         memory = Memory(
+
             content=content,
+
             category=category,
-            importance=importance,
+
+            importance=calculate_importance(
+                category
+            ),
+
             embedding=embedding,
+
             state="active",
         )
 
         db.add(memory)
 
         db.commit()
+
         db.refresh(memory)
 
         return memory
 
     finally:
+
         db.close()
 
 
@@ -133,44 +166,65 @@ def get_memories(
     db = SessionLocal()
 
     try:
+
         query = (
             db.query(Memory)
-            .filter(Memory.state != "archived")
+            .filter(
+                Memory.state != "archived"
+            )
         )
 
         if category:
+
             query = query.filter(
                 Memory.category == category
             )
 
         if min_importance is not None:
+
             query = query.filter(
-                Memory.importance >= min_importance
+                Memory.importance
+                >= min_importance
             )
 
         if keyword:
+
             query = query.filter(
-                Memory.content.ilike(f"%{keyword}%")
+                Memory.content.ilike(
+                    f"%{keyword}%"
+                )
             )
 
         memories = (
-            query
-            .order_by(desc(Memory.importance))
-            .all()
+            query.order_by(
+                desc(
+                    Memory.importance
+                )
+            ).all()
         )
 
         for memory in memories:
-            memory.access_count += 1
-            memory.last_accessed = datetime.now(UTC)
 
-            update_memory_state(memory)
-            decay_memory(memory)
+            memory.access_count += 1
+
+            memory.last_accessed = datetime.now(
+                UTC
+            )
+
+            update_memory_state(
+                memory
+            )
+
+            decay_memory(
+                memory
+            )
 
         db.commit()
 
         return memories
 
     finally:
+
         db.close()
 
 
@@ -181,42 +235,60 @@ def update_memory(
     db = SessionLocal()
 
     try:
+
         memory = (
             db.query(Memory)
-            .filter(Memory.id == memory_id)
+            .filter(
+                Memory.id == memory_id
+            )
             .first()
         )
 
         if memory is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Memory not found.",
             )
 
         memory.content = content
-        memory.embedding = generate_embedding(content)
-        memory.last_accessed = datetime.now(UTC)
+
+        memory.embedding = generate_embedding(
+            content
+        )
+
+        memory.last_accessed = datetime.now(
+            UTC
+        )
 
         db.commit()
+
         db.refresh(memory)
 
         return memory
 
     finally:
+
         db.close()
 
 
-def delete_memory(memory_id: int):
+def delete_memory(
+    memory_id: int,
+):
     db = SessionLocal()
 
     try:
+
         memory = (
             db.query(Memory)
-            .filter(Memory.id == memory_id)
+            .filter(
+                Memory.id == memory_id
+            )
             .first()
         )
 
         if memory is None:
+
             raise HTTPException(
                 status_code=404,
                 detail="Memory not found.",
@@ -231,4 +303,5 @@ def delete_memory(memory_id: int):
         }
 
     finally:
+
         db.close()

@@ -8,16 +8,15 @@ def retrieve_memories(
     limit: int = 5,
 ):
     """
-    Retrieve the most relevant memories.
+    Central retrieval entry point.
 
-    Pipeline:
-        1. Semantic Search
-        2. Ranking
-        3. Sort
-        4. Return Top-K
+    Currently performs semantic retrieval.
 
-    Graph retrieval will be plugged into this
-    function in the next milestone.
+    Future versions will merge:
+    - Semantic Retrieval
+    - Graph Retrieval
+
+    without changing the public API.
     """
 
     semantic_results = semantic_search(
@@ -30,16 +29,14 @@ def retrieve_memories(
 
     for memory, distance in semantic_results:
 
-        score = calculate_score(
-            memory=memory,
-            distance=distance,
-        )
-
         candidates.append(
             {
                 "memory": memory,
                 "distance": distance,
-                "score": score,
+                "score": calculate_score(
+                    memory,
+                    distance,
+                ),
                 "source": "semantic",
             }
         )
@@ -50,6 +47,9 @@ def retrieve_memories(
     )
 
     return [
-        (item["memory"], item["score"])
-        for item in candidates[:limit]
+        (
+            candidate["memory"],
+            candidate["score"],
+        )
+        for candidate in candidates[:limit]
     ]
