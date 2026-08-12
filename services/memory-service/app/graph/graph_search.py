@@ -1,16 +1,38 @@
 from app.graph.graph_models import (
-    KnowledgeGraph,
+    GraphNode,
+    GraphEdge,
 )
 
 
-def expand_context(
-    query_entities: list[str],
-    graph: KnowledgeGraph,
-) -> list[str]:
+class GraphSearch:
     """
-    Expand query entities using the KnowledgeGraph.
+    Search the in-memory knowledge graph.
     """
 
-    return graph.expand(
-        query_entities,
-    )
+    def __init__(
+        self,
+        nodes: list[GraphNode],
+        edges: list[GraphEdge],
+    ):
+        self.nodes = nodes
+        self.edges = edges
+
+    def search(
+        self,
+        keyword: str,
+    ) -> list[GraphNode]:
+        """
+        Return all nodes matching a keyword.
+        """
+
+        keyword = keyword.lower()
+
+        matches = []
+
+        for node in self.nodes:
+
+            if keyword in node.label.lower():
+
+                matches.append(node)
+
+        return matches

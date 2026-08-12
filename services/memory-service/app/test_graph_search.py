@@ -1,58 +1,52 @@
 from app.graph.graph_models import (
     GraphNode,
     GraphEdge,
-    KnowledgeGraph,
 )
 
 from app.graph.graph_search import (
-    expand_context,
+    GraphSearch,
 )
 
-graph = KnowledgeGraph(
 
-    nodes=[
+nodes = [
 
-        GraphNode(
-            id="coffee",
-            label="Coffee",
-            type="drink",
-        ),
+    GraphNode(
+        id="coffee",
+        label="Coffee",
+        type="drink",
+    ),
 
-        GraphNode(
-            id="cappuccino",
-            label="Cappuccino",
-            type="drink",
-        ),
+    GraphNode(
+        id="pune",
+        label="Pune",
+        type="location",
+    ),
 
-        GraphNode(
-            id="starbucks",
-            label="Starbucks",
-            type="company",
-        ),
+]
 
-    ],
+edges = [
 
-    edges=[
+    GraphEdge(
+        source="user",
+        target="coffee",
+        relationship="likes",
+    ),
 
-        GraphEdge(
-            source="coffee",
-            target="cappuccino",
-            relationship="related",
-        ),
+    GraphEdge(
+        source="user",
+        target="pune",
+        relationship="lives_in",
+    ),
 
-        GraphEdge(
-            source="cappuccino",
-            target="starbucks",
-            relationship="served_at",
-        ),
+]
 
-    ],
-
+graph = GraphSearch(
+    nodes,
+    edges,
 )
 
-expanded = expand_context(
-    ["coffee"],
-    graph,
+print(
+    graph.search(
+        "coffee"
+    )
 )
-
-print(expanded)
