@@ -1,21 +1,31 @@
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import text
 
-
-from ..models import Memory
-
-
-from sentence_transformers import SentenceTransformer
 from app.models import Memory
+
+print("Loading embedding model...")
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
+print("Embedding model ready.")
 
-def generate_embedding(text: str):
+
+def generate_embedding(text: str) -> list[float]:
+    """
+    Generate a vector embedding for text.
+    """
     return model.encode(text).tolist()
 
 
-def semantic_search(db, query: str, limit: int = 20):
+def semantic_search(
+    db,
+    query: str,
+    limit: int = 20,
+):
+    """
+    Perform semantic similarity search using pgvector.
+    Returns:
+        List[(Memory, distance)]
+    """
 
     embedding = generate_embedding(query)
 
@@ -36,13 +46,3 @@ def semantic_search(db, query: str, limit: int = 20):
     )
 
     return results
-
-print("Loading embedding model...")
-
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
-print("Embedding model ready.")
-
-
-def generate_embedding(text: str):
-    return model.encode(text).tolist()
