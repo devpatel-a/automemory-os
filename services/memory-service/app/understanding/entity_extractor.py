@@ -1,4 +1,8 @@
+import spacy
+
 from app.understanding.models import Entity
+
+nlp = spacy.load("en_core_web_sm")
 
 
 MEMORY_KEYWORDS = {
@@ -61,11 +65,34 @@ MEMORY_KEYWORDS = {
 }
 
 
+def extract_entities(
+    text: str,
+) -> list[Entity]:
+    """
+    Extract named entities using spaCy.
+    """
+
+    doc = nlp(text)
+
+    entities = []
+
+    for ent in doc.ents:
+
+        entities.append(
+            Entity(
+                text=ent.text,
+                label=ent.label_,
+            )
+        )
+
+    return entities
+
+
 def extract_memory_entities(
     text: str,
 ) -> list[Entity]:
     """
-    Extract predefined domain entities.
+    Extract predefined AutoMemory entities.
     """
 
     text = text.lower()
@@ -77,12 +104,10 @@ def extract_memory_entities(
         if keyword in text:
 
             entities.append(
-
                 Entity(
                     text=keyword,
                     label=label,
                 )
-
             )
 
     return entities
