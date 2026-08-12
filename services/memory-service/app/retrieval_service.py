@@ -1,5 +1,5 @@
-from app.semantic.semantic_service import semantic_search
-from app.ranking_service import calculate_score
+from app.semantic.semantic_service import generate_embedding, semantic_search
+from app.ranking_service import compute_hybrid_rank_score, STOP_WORDS
 from app.graph.graph_service import GraphService
 from app.graph.graph_search import GraphSearch
 from app.context.query_entities import extract_query_entities
@@ -12,93 +12,129 @@ def retrieve_memories(
     limit: int = 5,
 ):
     """
-    Central Hybrid Retrieval API.
+    Central Hybrid Retrieval API with Candidate Fusion & Multi-Signal Feature Ranking.
 
-    Sources:
-        • Semantic Vector Search (pgvector)
-        • Keyword Text Search
-        • Knowledge Graph Node Traversal & Expansion
+    Flow:
+        Query → Semantic Retrieval → Keyword Retrieval → Graph Retrieval
+        → Candidate Deduplication → Feature Scoring → Final Ranking → Filtering → Top N Memories
     """
+    if not query or not query.strip():
+        return []
 
-    candidates = {}
+    # Performance: Generate query embedding ONCE and reuse it for semantic search
+    query_emb = generate_embedding(query)
 
-    # 1. Semantic Search
+    # Dictionary to deduplicate candidate memories by memory_id
+    candidate_map = {}
+
+    # 1. Semantic Search (reusing query_emb)
     semantic_results = semantic_search(
         db=db,
         query=query,
         limit=20,
+        query_embedding=query_emb,
     )
 
     for memory, distance in semantic_results:
-        if memory.state == "archived":
-            continue
-        dist_val = distance if distance is not None else 0.5
-        base_score = calculate_score(memory, dist_val)
-        candidates[memory.id] = {
+        candidate_map[memory.id] = {
             "memory": memory,
-            "semantic_score": base_score,
-            "keyword_bonus": 0.0,
-            "graph_bonus": 0.0,
+            "semantic_distance": distance,
+            "keyword_matched": False,
+            "graph_connected": False,
         }
 
     # 2. Keyword Search
-    words = [w.strip() for w in query.lower().split() if len(w.strip()) > 3]
-    if words:
-        keyword_memories = (
-            db.query(Memory)
-            .filter(Memory.state != "archived")
-            .filter(Memory.content.ilike(f"%{words[0]}%"))
-            .limit(10)
-            .all()
-        )
-        for memory in keyword_memories:
-            if memory.id in candidates:
-                candidates[memory.id]["keyword_bonus"] += 0.15
-            else:
-                candidates[memory.id] = {
-                    "memory": memory,
-                    "semantic_score": calculate_score(memory, 0.4),
-                    "keyword_bonus": 0.20,
-                    "graph_bonus": 0.0,
-                }
+    words = [
+        w.strip(".,!?\"'").lower()
+        for w in query.split()
+        if w.strip(".,!?\"'").lower() not in STOP_WORDS
+        and len(w.strip(".,!?\"'")) > 1
+    ]
+    if not words:
+        words = [
+            w.strip(".,!?\"'").lower()
+            for w in query.split()
+            if len(w.strip(".,!?\"'")) > 1
+        ]
 
-    # 3. Knowledge Graph Expansion (Uses shared process-level KnowledgeGraph)
+    keyword_mids = set()
+    if words:
+        for word in words[:3]:
+            kw_mems = (
+                db.query(Memory.id)
+                .filter(Memory.state != "archived")
+                .filter(Memory.content.ilike(f"%{word}%"))
+                .limit(10)
+                .all()
+            )
+            for row in kw_mems:
+                mid = row[0]
+                keyword_mids.add(mid)
+                if mid in candidate_map:
+                    candidate_map[mid]["keyword_matched"] = True
+
+    # 3. Knowledge Graph Expansion (Robust entity & term matching)
     graph_service = GraphService()
     kg = graph_service.repository.load()
     graph_search = GraphSearch(nodes=kg.nodes, edges=kg.edges)
 
     query_entities = extract_query_entities(query)
-    matched_mids = set()
+    graph_terms = set()
     for entity in query_entities:
         ent_text = entity.text if hasattr(entity, "text") else str(entity)
-        matched_mids.update(graph_search.memory_ids(ent_text))
+        if ent_text and ent_text.strip():
+            graph_terms.add(ent_text.strip().lower())
 
-    if matched_mids:
-        graph_memories = (
+    # Include non-stopword query terms for robust graph candidate discovery
+    for raw_term in query.split():
+        clean_term = raw_term.strip(".,!?\"'").lower()
+        if clean_term and clean_term not in STOP_WORDS and len(clean_term) > 1:
+            graph_terms.add(clean_term)
+
+    graph_mids = set()
+    for term in graph_terms:
+        matched = graph_search.memory_ids(term)
+        graph_mids.update(matched)
+
+    for mid in graph_mids:
+        if mid in candidate_map:
+            candidate_map[mid]["graph_connected"] = True
+
+    # 4. Bulk Fetch missing Memory objects in a SINGLE database query to avoid N+1 issues
+    all_needed_mids = (keyword_mids | graph_mids) - set(candidate_map.keys())
+    if all_needed_mids:
+        missing_memories = (
             db.query(Memory)
-            .filter(Memory.id.in_(matched_mids), Memory.state != "archived")
+            .filter(Memory.id.in_(all_needed_mids), Memory.state != "archived")
             .all()
         )
-        for memory in graph_memories:
-            if memory.id in candidates:
-                candidates[memory.id]["graph_bonus"] += 0.25
-            else:
-                candidates[memory.id] = {
-                    "memory": memory,
-                    "semantic_score": calculate_score(memory, 0.3),
-                    "keyword_bonus": 0.0,
-                    "graph_bonus": 0.25,
-                }
+        for memory in missing_memories:
+            candidate_map[memory.id] = {
+                "memory": memory,
+                "semantic_distance": None,
+                "keyword_matched": memory.id in keyword_mids,
+                "graph_connected": memory.id in graph_mids,
+            }
 
-    # Calculate final hybrid score
+    # 5. Feature Scoring & Filtering
     ranked = []
-    for item in candidates.values():
-        total_score = (
-            item["semantic_score"]
-            + item["keyword_bonus"]
-            + item["graph_bonus"]
-        )
-        ranked.append((item["memory"], total_score))
+    for item in candidate_map.values():
+        memory = item["memory"]
 
+        # Archived memories are strictly excluded
+        if getattr(memory, "state", None) == "archived":
+            continue
+
+        score = compute_hybrid_rank_score(
+            memory=memory,
+            semantic_distance=item["semantic_distance"],
+            keyword_matched=item["keyword_matched"],
+            graph_connected=item["graph_connected"],
+            query=query,
+        )
+
+        ranked.append((memory, score))
+
+    # 6. Final Ranking
     ranked.sort(key=lambda x: x[1], reverse=True)
     return ranked[:limit]

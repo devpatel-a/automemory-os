@@ -20,27 +20,27 @@ def semantic_search(
     db,
     query: str,
     limit: int = 20,
+    query_embedding: list[float] | None = None,
 ):
     """
     Perform semantic similarity search using pgvector.
+    Allows passing a precomputed query_embedding to eliminate duplicate model calls.
+
     Returns:
         List[(Memory, distance)]
     """
-
-    embedding = generate_embedding(query)
+    embedding = (
+        query_embedding
+        if query_embedding is not None
+        else generate_embedding(query)
+    )
 
     results = (
         db.query(
             Memory,
-            Memory.embedding.cosine_distance(
-                embedding
-            ).label("distance"),
+            Memory.embedding.cosine_distance(embedding).label("distance"),
         )
-        .order_by(
-            Memory.embedding.cosine_distance(
-                embedding
-            )
-        )
+        .order_by(Memory.embedding.cosine_distance(embedding))
         .limit(limit)
         .all()
     )
