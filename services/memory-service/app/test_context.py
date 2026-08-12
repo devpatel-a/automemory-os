@@ -8,9 +8,19 @@ db = SessionLocal()
 
 engine = ContextEngine()
 
-prompt = engine.build_context(
-    db,
-    "Recommend a cafe",
+query = "Recommend a cafe"
+
+print("\n========== QUERY ==========\n")
+
+print(query)
+
+context = engine.build_context(
+    db=db,
+    query=query,
 )
 
-print(prompt)
+print("\n========== CONTEXT ==========\n")
+
+print(context)
+
+print("\n========== SUCCESS ==========\n")

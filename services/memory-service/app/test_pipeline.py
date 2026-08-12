@@ -1,19 +1,30 @@
 from app.database import SessionLocal
-
-from app.pipeline.memory_pipeline import (
-    MemoryPipeline,
-)
+from app.pipeline.memory_pipeline import MemoryPipeline
 
 db = SessionLocal()
 
 pipeline = MemoryPipeline(db)
 
 result = pipeline.process(
-
-    "My favorite drink is coffee.",
-
-    "preference",
-
+    content="I love coffee in Pune.",
+    category="preference",
 )
 
-print(result)
+print("\n========== PIPELINE RESULT ==========\n")
+
+print("Memory")
+print(result["memory"])
+
+print("\nParsed Memory")
+print(result["parsed"])
+
+print("\nKnowledge")
+print(result["knowledge"])
+
+print("\nDecision")
+print(result["decision"])
+
+print("\nGraph")
+print(result["graph"])
+
+print("\n========== SUCCESS ==========\n")
