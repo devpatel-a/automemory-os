@@ -305,3 +305,50 @@ def delete_memory(
     finally:
 
         db.close()
+
+
+def reinforce_existing_memory(db, memory: Memory):
+    memory.importance = min(memory.importance + 0.05, 1.0)
+    memory.access_count += 1
+    memory.confidence = min(memory.confidence + 0.10, 1.0)
+    memory.last_accessed = datetime.now(UTC)
+    update_memory_state(memory)
+    decay_memory(memory)
+    db.commit()
+    db.refresh(memory)
+    return memory
+
+
+def contradict_existing_memory(db, existing_memory: Memory, new_memory_id: int):
+    existing_memory.is_contradicted = True
+    existing_memory.contradicted_by_id = new_memory_id
+    existing_memory.confidence = max(existing_memory.confidence - 0.20, 0.0)
+    existing_memory.state = "archived"
+    db.commit()
+    db.refresh(existing_memory)
+    return existing_memory
+
+
+def merge_existing_memories(db, memory_ids: list[int], merged_content: str, category: str):
+    merged_embedding = generate_embedding(merged_content)
+    new_memory = Memory(
+        content=merged_content,
+        category=category,
+        importance=calculate_importance(category),
+        embedding=merged_embedding,
+        state="active",
+        confidence=1.0,
+    )
+    db.add(new_memory)
+    db.flush()
+
+    for mid in memory_ids:
+        mem = db.query(Memory).filter(Memory.id == mid).first()
+        if mem:
+            mem.state = "archived"
+            mem.is_contradicted = True
+            mem.contradicted_by_id = new_memory.id
+
+    db.commit()
+    db.refresh(new_memory)
+    return new_memory

@@ -28,7 +28,15 @@ class Memory(Base):
         default="active",
     )
 
-    state: Mapped[str] = mapped_column(default="weak")
+    confidence: Mapped[float] = mapped_column(
+        Float,
+        default=1.0,
+    )
+
+    contradicted_by_id: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),

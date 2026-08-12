@@ -1,7 +1,6 @@
-from database import engine
+from app.database import engine
 
-try:
+
+def test_postgres_connection():
     with engine.connect():
-        print("✅ Connected to PostgreSQL!")
-except Exception as e:
-    print(e)
+        pass

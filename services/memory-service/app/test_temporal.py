@@ -1,28 +1,9 @@
-from app.understanding.temporal_parser import (
-    extract_temporal_information,
-)
+from app.understanding.temporal_parser import extract_temporal_information
 
-tests = [
 
-    "I study Python every evening.",
+def test_temporal_information_extraction():
+    res1 = extract_temporal_information("I study Python every evening.")
+    assert len(res1) > 0
 
-    "I bought a Tesla yesterday.",
-
-    "I go to work every Monday.",
-
-    "I wake up every day.",
-
-    "I will travel next week.",
-]
-
-for sentence in tests:
-
-    print(sentence)
-
-    print(
-        extract_temporal_information(
-            sentence,
-        )
-    )
-
-    print("-" * 40)
+    res2 = extract_temporal_information("I bought a Tesla yesterday.")
+    assert len(res2) > 0

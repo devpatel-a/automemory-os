@@ -1,34 +1,20 @@
-from app.knowledge.fact_models import (
-    KnowledgeFact,
-)
+from app.knowledge.fact_models import KnowledgeFact
+from app.knowledge.confidence_engine import reinforce_fact, contradict_fact
 
-from app.knowledge.confidence_engine import (
-    reinforce_fact,
-    contradict_fact,
-)
 
-fact = KnowledgeFact(
+def test_confidence_engine():
+    fact = KnowledgeFact(
+        entity="user",
+        attribute="favorite_drink",
+        value="coffee",
+    )
+    assert fact.confidence == 0.60
+    assert fact.evidence_count == 1
 
-    entity="user",
+    reinforce_fact(fact)
+    assert round(fact.confidence, 2) == 0.70
+    assert fact.evidence_count == 2
 
-    attribute="favorite_drink",
-
-    value="coffee",
-
-)
-
-print(fact)
-
-print()
-
-reinforce_fact(fact)
-
-reinforce_fact(fact)
-
-print(fact)
-
-print()
-
-contradict_fact(fact)
-
-print(fact)
+    contradict_fact(fact)
+    assert round(fact.confidence, 2) == 0.50
+    assert fact.contradiction_count == 1

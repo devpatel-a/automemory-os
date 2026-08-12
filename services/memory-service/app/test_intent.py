@@ -1,22 +1,9 @@
-from app.understanding.intent_detector import (
-    detect_intent,
-)
+from app.understanding.intent_detector import detect_intent, MemoryIntent
 
-tests = [
-    "I like coffee.",
-    "I study Python every evening.",
-    "I bought a Tesla yesterday.",
-    "My name is Dev Patel.",
-    "The sky is blue.",
-]
 
-for sentence in tests:
-
-    print(sentence)
-
-    print(
-        "->",
-        detect_intent(sentence).value,
-    )
-
-    print("-" * 40)
+def test_intent_detection():
+    assert detect_intent("I like coffee.") == MemoryIntent.PREFERENCE
+    assert detect_intent("I study Python every evening.") == MemoryIntent.HABIT
+    assert detect_intent("I bought a Tesla yesterday.") == MemoryIntent.EVENT
+    assert detect_intent("My name is Dev Patel.") == MemoryIntent.PROFILE
+    assert detect_intent("The sky is blue.") == MemoryIntent.FACT

@@ -1,22 +1,13 @@
-from app.intelligence.classifier import (
-    classify,
-    MemoryRelation,
-)
+from app.intelligence.classifier import classify, MemoryRelation
 
 
-tests = [
-
-    ("Duplicate", 0.08),
-
-    ("Reinforcement", 0.22),
-
-    ("Related", 0.40),
-
-    ("Independent", 0.75),
-]
-
-for label, distance in tests:
-
-    result = classify(None, distance)
-
-    print(label, "→", result.value)
+def test_intelligence_classifier():
+    tests = [
+        (MemoryRelation.DUPLICATE, 0.08),
+        (MemoryRelation.REINFORCEMENT, 0.22),
+        (MemoryRelation.RELATED, 0.40),
+        (MemoryRelation.INDEPENDENT, 0.75),
+    ]
+    for expected_relation, distance in tests:
+        result = classify(None, distance)
+        assert result == expected_relation

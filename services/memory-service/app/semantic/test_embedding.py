@@ -1,20 +1,8 @@
-from sentence_transformers import SentenceTransformer
+from app.semantic.semantic_service import generate_embedding
 
-print("Loading model...")
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
-
-print("Model loaded!")
-
-sentence = "I love espresso."
-
-embedding = model.encode(sentence)
-
-print("\nSentence:")
-print(sentence)
-
-print("\nEmbedding Dimension:")
-print(len(embedding))
-
-print("\nFirst 10 Values:")
-print(embedding[:10])
+def test_embedding_generation():
+    sentence = "I love espresso."
+    embedding = generate_embedding(sentence)
+    assert isinstance(embedding, list)
+    assert len(embedding) == 384

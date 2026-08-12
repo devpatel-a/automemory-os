@@ -1,9 +1,7 @@
-from semantic_service import generate_embedding
+from app.semantic.semantic_service import generate_embedding
 
-embedding = generate_embedding(
-    "Coffee is my favorite drink."
-)
 
-print(type(embedding))
-print(len(embedding))
-print(embedding[:10])
+def test_semantic_service_generate_embedding():
+    embedding = generate_embedding("Coffee is my favorite drink.")
+    assert isinstance(embedding, list)
+    assert len(embedding) == 384

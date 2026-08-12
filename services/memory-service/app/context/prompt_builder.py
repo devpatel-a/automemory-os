@@ -1,43 +1,41 @@
-from app.context.context_models import (
-    ContextPackage,
-)
+from app.context.context_models import ContextPackage
 
 
 def build_prompt(
     context: ContextPackage,
 ) -> str:
     """
-    Convert a ContextPackage into a
-    prompt for the LLM.
+    Convert a ContextPackage into a complete structured prompt for an AI Agent.
     """
 
-    sections = []
-
-    sections.append(
-        f"User Query:\n{context.query}\n"
-    )
-
-    groups = [
-        ("Profile", context.profile),
-        ("Preferences", context.preferences),
-        ("Habits", context.habits),
-        ("Events", context.events),
-        ("Other", context.other),
+    sections = [
+        "System: You are an intelligent AI assistant backed by AutoMemory OS.",
+        "Use the relevant long-term memory context below to respond accurately to the user query.\n",
     ]
 
-    for title, memories in groups:
+    sections.append(f"User Query:\n{context.query}\n")
 
+    sections.append("Retrieved Long-Term Memories:")
+
+    groups = [
+        ("User Profile", context.profile),
+        ("Preferences", context.preferences),
+        ("Habits & Routines", context.habits),
+        ("Past Events", context.events),
+        ("General Facts", context.other),
+    ]
+
+    has_memories = False
+    for title, memories in groups:
         if not memories:
             continue
 
-        sections.append(f"{title}:")
-
+        has_memories = True
+        sections.append(f"\n[{title}]")
         for memory in memories:
+            sections.append(f"- {memory}")
 
-            sections.append(
-                f"- {memory}"
-            )
-
-        sections.append("")
+    if not has_memories:
+        sections.append("- (No relevant prior memories found)")
 
     return "\n".join(sections).strip()
