@@ -4,13 +4,26 @@ from app.service import (
     create_memory,
     reinforce_existing_memory,
     contradict_existing_memory,
+    update_existing_fact_memory,
+    merge_existing_memories,
 )
 from app.understanding.memory_parser import parse_memory
 from app.knowledge.processor import process_knowledge
+from app.knowledge.fact_extractor import extract_fact
+from app.knowledge.classifier import is_merge_equivalent
+from app.knowledge.contradiction_detector import detect_contradiction
 from app.decision.decision_engine import decide
 from app.decision.decision_types import MemoryAction
 from app.graph.graph_service import GraphService
 from app.semantic.semantic_service import semantic_search
+
+
+def get_memory_object(item):
+    if hasattr(item, "content"):
+        return item
+    if hasattr(item, "__getitem__"):
+        return item[0]
+    return item
 
 
 class MemoryPipeline:
@@ -26,7 +39,7 @@ class MemoryPipeline:
             ↓
         Decision Engine
             ↓
-        Memory Engine (Evolution: Store / Reinforce / Contradict / Update)
+        Memory Engine (Evolution: Store / Reinforce / Update / Merge / Contradict)
             ↓
         Knowledge Graph
     """
@@ -44,6 +57,7 @@ class MemoryPipeline:
         parsed_memory = parse_memory(content)
 
         # 2. Retrieve Candidates for Knowledge Processing
+        self.db.expire_all()
         candidates = semantic_search(self.db, content, limit=5)
 
         # 3. Knowledge Engine
@@ -53,16 +67,72 @@ class MemoryPipeline:
         decision = decide(knowledge)
 
         # 5. Memory Engine Execution based on Decision
-        if decision.action == MemoryAction.REINFORCE and candidates:
-            existing_mem = candidates[0][0]
+        if decision.action == MemoryAction.UPDATE and candidates:
+            target_mem = None
+            if parsed_memory:
+                new_fact = extract_fact(parsed_memory)
+                if new_fact:
+                    norm_ent = new_fact.entity.strip().lower()
+                    norm_attr = new_fact.attribute.strip().lower()
+                    for item in candidates:
+                        cm = get_memory_object(item)
+                        if hasattr(cm, "content"):
+                            ef = extract_fact(parse_memory(cm.content))
+                            if (
+                                ef
+                                and ef.entity.strip().lower() == norm_ent
+                                and ef.attribute.strip().lower() == norm_attr
+                            ):
+                                target_mem = cm
+                                break
+            # STRICT UPDATE SAFETY: Only update if a valid fact match was established
+            if target_mem:
+                memory = update_existing_fact_memory(
+                    self.db, target_mem, content, category
+                )
+            else:
+                memory = create_memory(content=content, category=category, db=self.db)
+
+        elif decision.action == MemoryAction.MERGE and candidates:
+            # MERGE CORRECTNESS: Filter candidates so ONLY merge-equivalent memories are merged
+            merge_candidates = []
+            for item in candidates:
+                cm = get_memory_object(item)
+                dist = (
+                    item[1]
+                    if hasattr(item, "__getitem__") and len(item) > 1
+                    else None
+                )
+                if is_merge_equivalent(parsed_memory, cm, distance=dist):
+                    merge_candidates.append(cm)
+
+            if merge_candidates:
+                memory = merge_existing_memories(
+                    self.db, merge_candidates, content, category
+                )
+            else:
+                memory = create_memory(content=content, category=category, db=self.db)
+
+        elif decision.action == MemoryAction.REINFORCE and candidates:
+            existing_mem = get_memory_object(candidates[0])
             memory = reinforce_existing_memory(self.db, existing_mem)
+
         elif decision.action == MemoryAction.ARCHIVE and candidates:
-            # Handle contradiction: archive existing memory and create new
-            existing_mem = candidates[0][0]
-            memory = create_memory(content=content, category=category)
-            contradict_existing_memory(self.db, existing_mem, memory.id)
+            # Handle contradiction: target only the specific candidate for which detect_contradiction returns True
+            contradictory_cand = None
+            if parsed_memory:
+                for item in candidates:
+                    cm = get_memory_object(item)
+                    if detect_contradiction(parsed_memory, cm):
+                        contradictory_cand = cm
+                        break
+
+            memory = create_memory(content=content, category=category, db=self.db)
+            if contradictory_cand:
+                contradict_existing_memory(self.db, contradictory_cand, memory.id)
+
         else:
-            memory = create_memory(content=content, category=category)
+            memory = create_memory(content=content, category=category, db=self.db)
 
         # 6. Knowledge Graph
         graph = self.graph_service.process_memory(

@@ -62,35 +62,33 @@ def retrieve_memories(
                     "graph_bonus": 0.0,
                 }
 
-    # 3. Knowledge Graph Expansion
-    try:
-        graph_service = GraphService()
-        kg = graph_service.repository.load()
-        graph_search = GraphSearch(nodes=kg.nodes, edges=kg.edges)
+    # 3. Knowledge Graph Expansion (Uses shared process-level KnowledgeGraph)
+    graph_service = GraphService()
+    kg = graph_service.repository.load()
+    graph_search = GraphSearch(nodes=kg.nodes, edges=kg.edges)
 
-        query_entities = extract_query_entities(query)
-        matched_mids = set()
-        for entity in query_entities:
-            matched_mids.update(graph_search.memory_ids(entity))
+    query_entities = extract_query_entities(query)
+    matched_mids = set()
+    for entity in query_entities:
+        ent_text = entity.text if hasattr(entity, "text") else str(entity)
+        matched_mids.update(graph_search.memory_ids(ent_text))
 
-        if matched_mids:
-            graph_memories = (
-                db.query(Memory)
-                .filter(Memory.id.in_(matched_mids), Memory.state != "archived")
-                .all()
-            )
-            for memory in graph_memories:
-                if memory.id in candidates:
-                    candidates[memory.id]["graph_bonus"] += 0.25
-                else:
-                    candidates[memory.id] = {
-                        "memory": memory,
-                        "semantic_score": calculate_score(memory, 0.3),
-                        "keyword_bonus": 0.0,
-                        "graph_bonus": 0.25,
-                    }
-    except Exception:
-        pass
+    if matched_mids:
+        graph_memories = (
+            db.query(Memory)
+            .filter(Memory.id.in_(matched_mids), Memory.state != "archived")
+            .all()
+        )
+        for memory in graph_memories:
+            if memory.id in candidates:
+                candidates[memory.id]["graph_bonus"] += 0.25
+            else:
+                candidates[memory.id] = {
+                    "memory": memory,
+                    "semantic_score": calculate_score(memory, 0.3),
+                    "keyword_bonus": 0.0,
+                    "graph_bonus": 0.25,
+                }
 
     # Calculate final hybrid score
     ranked = []

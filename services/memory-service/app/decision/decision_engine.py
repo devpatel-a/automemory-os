@@ -37,6 +37,12 @@ def decide(
             reason="Existing fact should be updated.",
         )
 
+    if decision == KnowledgeDecision.MERGE:
+        return DecisionResult(
+            action=MemoryAction.MERGE,
+            reason="Equivalent memories merged into canonical memory.",
+        )
+
     if decision == KnowledgeDecision.CONTRADICTION:
         return DecisionResult(
             action=MemoryAction.ARCHIVE,

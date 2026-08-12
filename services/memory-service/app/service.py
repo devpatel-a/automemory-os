@@ -2,9 +2,11 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import desc
+from sqlalchemy.orm import Session
 
 from .database import SessionLocal
 from .models import Memory
+from .models_relationship import MemoryRelationship
 
 from .semantic.semantic_service import (
     generate_embedding,
@@ -15,6 +17,14 @@ from .duplicate_service import (
     find_duplicate,
     strengthen_memory,
 )
+
+
+def get_memory_object(item):
+    if hasattr(item, "content"):
+        return item
+    if hasattr(item, "__getitem__"):
+        return item[0]
+    return item
 
 
 def calculate_importance(category: str) -> float:
@@ -48,23 +58,17 @@ def decay_memory(memory: Memory):
 def create_memory(
     content: str,
     category: str,
+    db: Session | None = None,
 ):
     """
-    Store or reinforce a memory.
-
-    This function is intentionally responsible
-    only for persistence-related logic.
-
-    Workflow orchestration belongs to
-    MemoryPipeline.
+    Store or reinforce a memory with optional database session reuse.
     """
-
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
 
     try:
 
         existing = (
-            db.query(Memory)
+            db_session.query(Memory)
             .filter(
                 Memory.content == content
             )
@@ -88,9 +92,9 @@ def create_memory(
 
             decay_memory(existing)
 
-            db.commit()
+            db_session.commit()
 
-            db.refresh(existing)
+            db_session.refresh(existing)
 
             return existing
 
@@ -99,7 +103,7 @@ def create_memory(
         )
 
         candidates = semantic_search(
-            db=db,
+            db=db_session,
             query=content,
             limit=5,
         )
@@ -122,9 +126,9 @@ def create_memory(
                 duplicate
             )
 
-            db.commit()
+            db_session.commit()
 
-            db.refresh(
+            db_session.refresh(
                 duplicate
             )
 
@@ -145,30 +149,32 @@ def create_memory(
             state="active",
         )
 
-        db.add(memory)
+        db_session.add(memory)
 
-        db.commit()
+        db_session.commit()
 
-        db.refresh(memory)
+        db_session.refresh(memory)
 
         return memory
 
     finally:
 
-        db.close()
+        if db is None:
+            db_session.close()
 
 
 def get_memories(
     category: str | None = None,
     min_importance: float | None = None,
     keyword: str | None = None,
+    db: Session | None = None,
 ):
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
 
     try:
 
         query = (
-            db.query(Memory)
+            db_session.query(Memory)
             .filter(
                 Memory.state != "archived"
             )
@@ -219,25 +225,27 @@ def get_memories(
                 memory
             )
 
-        db.commit()
+        db_session.commit()
 
         return memories
 
     finally:
 
-        db.close()
+        if db is None:
+            db_session.close()
 
 
 def update_memory(
     memory_id: int,
     content: str,
+    db: Session | None = None,
 ):
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
 
     try:
 
         memory = (
-            db.query(Memory)
+            db_session.query(Memory)
             .filter(
                 Memory.id == memory_id
             )
@@ -261,26 +269,28 @@ def update_memory(
             UTC
         )
 
-        db.commit()
+        db_session.commit()
 
-        db.refresh(memory)
+        db_session.refresh(memory)
 
         return memory
 
     finally:
 
-        db.close()
+        if db is None:
+            db_session.close()
 
 
 def delete_memory(
     memory_id: int,
+    db: Session | None = None,
 ):
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
 
     try:
 
         memory = (
-            db.query(Memory)
+            db_session.query(Memory)
             .filter(
                 Memory.id == memory_id
             )
@@ -294,9 +304,9 @@ def delete_memory(
                 detail="Memory not found.",
             )
 
-        db.delete(memory)
+        db_session.delete(memory)
 
-        db.commit()
+        db_session.commit()
 
         return {
             "message": "Memory deleted successfully."
@@ -304,10 +314,11 @@ def delete_memory(
 
     finally:
 
-        db.close()
+        if db is None:
+            db_session.close()
 
 
-def reinforce_existing_memory(db, memory: Memory):
+def reinforce_existing_memory(db: Session, memory: Memory):
     memory.importance = min(memory.importance + 0.05, 1.0)
     memory.access_count += 1
     memory.confidence = min(memory.confidence + 0.10, 1.0)
@@ -319,7 +330,7 @@ def reinforce_existing_memory(db, memory: Memory):
     return memory
 
 
-def contradict_existing_memory(db, existing_memory: Memory, new_memory_id: int):
+def contradict_existing_memory(db: Session, existing_memory: Memory, new_memory_id: int):
     existing_memory.is_contradicted = True
     existing_memory.contradicted_by_id = new_memory_id
     existing_memory.confidence = max(existing_memory.confidence - 0.20, 0.0)
@@ -329,26 +340,134 @@ def contradict_existing_memory(db, existing_memory: Memory, new_memory_id: int):
     return existing_memory
 
 
-def merge_existing_memories(db, memory_ids: list[int], merged_content: str, category: str):
-    merged_embedding = generate_embedding(merged_content)
-    new_memory = Memory(
-        content=merged_content,
-        category=category,
-        importance=calculate_importance(category),
-        embedding=merged_embedding,
-        state="active",
-        confidence=1.0,
-    )
-    db.add(new_memory)
-    db.flush()
+def update_existing_fact_memory(
+    db: Session,
+    existing_memory: Memory,
+    new_content: str,
+    category: str | None = None,
+) -> Memory:
+    """
+    Update an existing memory in place when a new memory supersedes an existing fact (UPDATE workflow).
+    Prevents creating duplicate memory records.
+    """
+    existing_memory.content = new_content
+    if category:
+        existing_memory.category = category
+    existing_memory.embedding = generate_embedding(new_content)
+    existing_memory.last_accessed = datetime.now(UTC)
+    existing_memory.access_count += 1
+    existing_memory.is_contradicted = False
+    existing_memory.contradicted_by_id = None
+    existing_memory.confidence = min(existing_memory.confidence + 0.05, 1.0)
+    update_memory_state(existing_memory)
+    db.commit()
+    db.refresh(existing_memory)
+    return existing_memory
 
-    for mid in memory_ids:
-        mem = db.query(Memory).filter(Memory.id == mid).first()
-        if mem:
-            mem.state = "archived"
-            mem.is_contradicted = True
-            mem.contradicted_by_id = new_memory.id
+
+def merge_existing_memories(
+    db: Session,
+    existing_memories: list,
+    merged_content: str,
+    category: str,
+) -> Memory:
+    """
+    Merge semantically equivalent memories into a canonical memory (MERGE workflow).
+    Preserves confidence, earliest created_at timestamp, total access count, and relationships.
+    Redundant archived memories have is_contradicted = False and contradicted_by_id = None.
+    Avoids duplicate relationships.
+    """
+    cleaned_mems = []
+    for item in existing_memories:
+        m = get_memory_object(item)
+        if hasattr(m, "id"):
+            cleaned_mems.append(m)
+
+    if not cleaned_mems:
+        return create_memory(content=merged_content, category=category, db=db)
+
+    canonical = cleaned_mems[0]
+
+    # Preserve confidence (maximum confidence among merged memories)
+    conf_values = [
+        m.confidence
+        for m in cleaned_mems
+        if hasattr(m, "confidence") and m.confidence is not None
+    ]
+    preserved_conf = max(conf_values) if conf_values else 1.0
+
+    # Preserve earliest created_at timestamp
+    timestamps = [
+        m.created_at
+        for m in cleaned_mems
+        if getattr(m, "created_at", None) is not None
+    ]
+    earliest_created = min(timestamps) if timestamps else datetime.now(UTC)
+
+    # Sum total access count
+    total_access = sum([getattr(m, "access_count", 0) for m in cleaned_mems]) + 1
+
+    canonical.content = merged_content
+    canonical.category = category
+    canonical.embedding = generate_embedding(merged_content)
+    canonical.confidence = min(preserved_conf + 0.05, 1.0)
+    canonical.access_count = total_access
+    canonical.created_at = earliest_created
+    canonical.last_accessed = datetime.now(UTC)
+    canonical.state = "active"
+    canonical.is_contradicted = False
+    canonical.contradicted_by_id = None
+
+    canonical_id = canonical.id
+
+    # Preserve relationships by transferring relationships from other merged memories without duplicates
+    existing_rel_pairs = set()
+    canonical_rels = db.query(MemoryRelationship).filter(
+        (MemoryRelationship.source_memory_id == canonical_id)
+        | (MemoryRelationship.target_memory_id == canonical_id)
+    ).all()
+    for r in canonical_rels:
+        existing_rel_pairs.add(
+            (r.source_memory_id, r.target_memory_id, r.relationship_type)
+        )
+
+    for other_mem in cleaned_mems[1:]:
+        if other_mem.id == canonical_id:
+            continue
+        other_mem.state = "archived"
+        # MERGE semantics: Redundant merged memories are NOT contradicted
+        other_mem.is_contradicted = False
+        other_mem.contradicted_by_id = None
+
+        other_rels = db.query(MemoryRelationship).filter(
+            (MemoryRelationship.source_memory_id == other_mem.id)
+            | (MemoryRelationship.target_memory_id == other_mem.id)
+        ).all()
+
+        for rel in other_rels:
+            new_src = (
+                canonical_id
+                if rel.source_memory_id == other_mem.id
+                else rel.source_memory_id
+            )
+            new_tgt = (
+                canonical_id
+                if rel.target_memory_id == other_mem.id
+                else rel.target_memory_id
+            )
+
+            if new_src == new_tgt:
+                db.delete(rel)
+                continue
+
+            pair_key = (new_src, new_tgt, rel.relationship_type)
+            if pair_key in existing_rel_pairs:
+                db.delete(rel)
+            else:
+                rel.source_memory_id = new_src
+                rel.target_memory_id = new_tgt
+                existing_rel_pairs.add(pair_key)
 
     db.commit()
-    db.refresh(new_memory)
-    return new_memory
+    db.refresh(canonical)
+    return canonical
