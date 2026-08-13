@@ -3,23 +3,39 @@
 ## Memory Processing Pipeline Flow (`MemoryPipeline.process`)
 
 ```
-Input Raw Text & Category
+Natural Language User Input
+      ↓
+1. Understanding: parse_memory(content)
+   • Extracts spaCy named entities & intent
+   • Entity Resolution: user pronouns (I / me / my / myself → user entity) vs non-user entities (Rahul, brother → distinct entities)
   ↓
-1. Understanding: parse_memory(content) → ParsedMemory(entities, intent, temporal)
+2. Candidate Discovery: semantic_search(db, content, limit=5)
+   • Fetches top vector candidates for knowledge comparison
   ↓
-2. Candidate Discovery: semantic_search(db, content, limit=5) → Top-5 Memory candidates
+3. Knowledge Reasoning: process_knowledge(parsed_memory, candidates)
+   • Generic Fact Extraction (extract_fact):
+     Extracts KnowledgeFact(entity, attribute, value, fact_type, temporal_info, confidence)
+     using spaCy dependency parsing, POS tags, noun chunks, and centralized canonical attribute normalization
+   • Zero Memory-Content Value Keywords:
+     Does NOT use specific memory values (coffee, espresso, Pune, Google, Python, MacBook, iPhone, etc.)
+   • Context-Aware Object Semantics:
+     Uses POS and noun chunk head structure to conservatively classify DEVICE vs TOOL/OTHER
+     ("I use a MacBook Air", "I use a computer", "I use a workstation" → device vs "I use Python for work", "I use Python", "I use a programming language" → tool)
+   • Knowledge Classification (classify_knowledge):
+     - UPDATE: same entity + same attribute + different value
+     - MERGE: same entity + same attribute + same value
+     - Unrelated attributes: must never UPDATE or MERGE
+     - CONTRADICTION: same entity + same attribute + different value (archival lineage)
   ↓
-3. Knowledge Reasoning: KnowledgeProcessor().process(parsed, candidates) → KnowledgeResult(decision, fact)
-  ↓
-4. Decision Mapping: DecisionEngine().evaluate(decision) → MemoryAction
+4. Decision Mapping: decide(knowledge) → MemoryAction
   ↓
 5. Memory Evolution Execution (app/service.py):
-   • STORE         → create_memory(content, category, db)
-   • REINFORCE     → reinforce_existing_memory(db, candidate)
-   • UPDATE        → update_existing_fact_memory(db, candidate, new_content, category)
-   • MERGE         → merge_existing_memories(db, candidates, new_content, category)
-   • ARCHIVE       → contradict_existing_memory(db, target, new_memory_id) + create_memory()
-   • RELATED       → create_memory(content, category, db) + create_relationship(source_id, target_id, "related_to")
+   • STORE         → create_memory()
+   • REINFORCE     → reinforce_existing_memory()
+   • UPDATE        → update_existing_fact_memory() (in-place fact update)
+   • MERGE         → merge_existing_memories() (consolidates canonical, transfers relationships, archives redundant)
+   • ARCHIVE       → contradict_existing_memory() (archives target with is_contradicted=True & contradicted_by_id)
+   • RELATED       → create_memory() + create_relationship("related_to")
   ↓
 6. Knowledge Graph Indexing: GraphService().process_memory(memory)
 ```
@@ -31,17 +47,17 @@ Input Raw Text & Category
 ```
 Input Query String
   ↓
-1. Query Understanding & Historical Check:
+1. Query Understanding & Historical Detection:
    extract_query_entities(query) + is_historical_query(query)
   ↓
 2. Candidate Retrieval:
    retrieve_memories(db, query, limit=10, include_archived=historical)
   ↓
-3. Evidence Evaluation (evaluate_evidence):
-   Calculates evidence_score = base_retrieval_score + entity_match_bonus
-                             + fact_attribute_match_bonus + temporal_intent_bonus
+3. Evidence Evaluation: evaluate_evidence(candidate, query, query_entities)
+   • Calculates evidence_score combining base retrieval score, exact entity match,
+     generic fact attribute match, category match, and temporal match
   ↓
-4. Conflict Resolution & Lineage Safety (resolve_conflicts):
+4. Conflict Resolution & Lineage Safety: resolve_conflicts(candidates, query)
    • Contradiction Lineage (contradicted_by_id)
    • Merge Safety (archived merged memories excluded if active canonical exists)
    • Fact Domain Resolution (created_at precedence for current queries)
