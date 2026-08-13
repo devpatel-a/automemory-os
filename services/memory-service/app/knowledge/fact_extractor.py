@@ -1,59 +1,196 @@
-from app.knowledge.fact_models import (
-    KnowledgeFact,
-)
+import spacy
+from app.knowledge.fact_models import KnowledgeFact
+from app.understanding.models import ParsedMemory
 
-from app.understanding.models import (
-    ParsedMemory,
-)
+nlp = spacy.load("en_core_web_sm")
+
+USER_PRONOUNS = {"i", "me", "my", "myself"}
+RELATION_NOUNS = {"brother", "sister", "mother", "father", "friend", "colleague", "wife", "husband", "son", "daughter", "boss", "partner"}
+ABSTRACT_CONCEPT_NOUNS = {"language", "concept", "framework", "library", "code", "script", "method", "syntax", "service", "app", "software", "tool", "technique", "process", "strategy", "algorithm"}
+
+# Centralized, inspectable linguistic normalization layer
+VERB_ATTRIBUTE_MAP = {
+    "live": ("residence", "LOCATION"),
+    "reside": ("residence", "LOCATION"),
+    "stay": ("residence", "LOCATION"),
+    "work": ("employer", "EMPLOYMENT"),
+    "employed": ("employer", "EMPLOYMENT"),
+    "prefer": ("preference", "PREFERENCE"),
+    "like": ("preference", "PREFERENCE"),
+    "love": ("preference", "PREFERENCE"),
+    "enjoy": ("preference", "PREFERENCE"),
+    "learn": ("learning_topic", "LEARNING"),
+    "study": ("learning_topic", "LEARNING"),
+    "master": ("learning_topic", "LEARNING"),
+    "own": ("device", "DEVICE"),
+    "play": ("activity", "ACTIVITY"),
+    "practice": ("activity", "ACTIVITY"),
+}
+
+NOUN_ATTRIBUTE_MAP = {
+    "location": ("residence", "LOCATION"),
+    "city": ("residence", "LOCATION"),
+    "residence": ("residence", "LOCATION"),
+    "employer": ("employer", "EMPLOYMENT"),
+    "company": ("employer", "EMPLOYMENT"),
+    "workplace": ("employer", "EMPLOYMENT"),
+    "preference": ("preference", "PREFERENCE"),
+    "drink": ("favorite_drink", "PREFERENCE"),
+    "food": ("preference", "PREFERENCE"),
+    "language": ("preference", "PREFERENCE"),
+    "topic": ("learning_topic", "LEARNING"),
+    "name": ("name", "PROFILE"),
+    "age": ("age", "PROFILE"),
+}
 
 
-def extract_fact(
-    memory: ParsedMemory,
-) -> KnowledgeFact | None:
+def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
+    """
+    Generic linguistic fact extractor using spaCy dependency parsing, POS tags,
+    noun chunks, and centralized canonical attribute normalization.
+    Zero domain-specific string branching or product value keywords.
+    """
+    if not memory or not memory.content or not memory.content.strip():
+        return None
 
-    text = memory.content.lower().strip()
+    raw_text = memory.content.strip()
+    doc = nlp(raw_text)
 
-    # Residence
-    if "live in" in text:
-        location = text.split("live in")[-1].strip(" .")
-        return KnowledgeFact(
-            entity="user",
-            attribute="residence",
-            value=location.lower().strip(),
-        )
-    elif "living in" in text:
-        location = text.split("living in")[-1].strip(" .")
-        return KnowledgeFact(
-            entity="user",
-            attribute="residence",
-            value=location.lower().strip(),
-        )
+    # 1. Subject & Entity Resolution (Non-user entity vs self/user resolution)
+    entity = "user"
+    subj_token = None
+    verb_token = None
 
-    # Favorite drink
-    if "favorite drink is" in text:
-        drink = text.split("favorite drink is")[-1].strip(" .")
-        return KnowledgeFact(
-            entity="user",
-            attribute="favorite_drink",
-            value=drink.lower().strip(),
-        )
+    for token in doc:
+        if token.dep_ in ("nsubj", "nsubjpass"):
+            subj_token = token
+            break
 
-    # Workplace
-    if "work at" in text:
-        company = text.split("work at")[-1].strip(" .")
-        return KnowledgeFact(
-            entity="user",
-            attribute="workplace",
-            value=company.lower().strip(),
-        )
+    for token in doc:
+        if token.pos_ in ("VERB", "AUX") and token.dep_ not in ("aux", "auxpass"):
+            verb_token = token
+            break
 
-    # Name
-    if "my name is" in text:
-        name = text.split("my name is")[-1].strip(" .")
-        return KnowledgeFact(
-            entity="user",
-            attribute="name",
-            value=name.lower().strip(),
-        )
+    possessive_my = any(t.lower_ in USER_PRONOUNS and t.dep_ == "poss" for t in doc)
 
-    return None
+    if subj_token:
+        propn_tokens = [t.text for t in subj_token.subtree if t.pos_ == "PROPN" and t.lower_ not in USER_PRONOUNS]
+        if propn_tokens:
+            entity = " ".join(propn_tokens)
+        elif possessive_my:
+            if subj_token.lemma_.lower() in RELATION_NOUNS:
+                entity = subj_token.text
+            else:
+                entity = "user"
+        elif subj_token.lower_ not in USER_PRONOUNS:
+            entity = subj_token.text
+
+    # 2. Attribute & Fact Type Extraction via Centralized Linguistic Normalization
+    attribute = None
+    fact_type = "OTHER"
+    verb_lemma = verb_token.lemma_.lower() if verb_token else ""
+
+    # Strategy A: Copula "is/am/are" with possessive or noun subject
+    if verb_token and verb_token.lemma_ in ("be", "is", "am", "are"):
+        head_noun = None
+        for token in doc:
+            if token.pos_ == "NOUN" and token.dep_ in ("nsubj", "attr"):
+                head_noun = token.lemma_.lower()
+                break
+        if head_noun in NOUN_ATTRIBUTE_MAP:
+            attribute, fact_type = NOUN_ATTRIBUTE_MAP[head_noun]
+        elif head_noun:
+            attribute = head_noun
+            fact_type = "PROFILE"
+    # Strategy B: Context-aware "use" verb object semantics (purely linguistic & conservative)
+    elif verb_lemma == "use":
+        dobj_token = None
+        for token in doc:
+            if token.dep_ == "dobj":
+                dobj_token = token
+                break
+
+        has_determiner = False
+        head_lemma = ""
+        is_abstract = False
+        is_bare_propn = False
+
+        if dobj_token:
+            has_determiner = any(t.dep_ in ("det", "poss") for t in dobj_token.subtree)
+            head_lemma = dobj_token.lemma_.lower()
+            is_abstract = head_lemma in ABSTRACT_CONCEPT_NOUNS
+            is_bare_propn = (dobj_token.pos_ == "PROPN" and not has_determiner)
+
+        has_tool_adjunct = any(t.lower_ in ("for", "to") for t in doc)
+
+        # Conservative Generic Object Semantics:
+        # 1. Abstract concept nouns ("programming language") or bare proper nouns ("Python") or tool adjuncts ("for work") -> tool / OTHER
+        # 2. Concrete noun / compound phrase with determiner ("a MacBook Air", "a computer", "a workstation") -> device / DEVICE
+        if dobj_token and not is_abstract and not is_bare_propn and (has_determiner or not has_tool_adjunct):
+            attribute, fact_type = "device", "DEVICE"
+        else:
+            attribute, fact_type = "tool", "OTHER"
+    # Strategy C: Action/Stative Verb Normalization
+    elif verb_lemma in VERB_ATTRIBUTE_MAP:
+        attribute, fact_type = VERB_ATTRIBUTE_MAP[verb_lemma]
+    elif verb_token:
+        attribute = verb_lemma
+        fact_type = "OTHER"
+
+    # 3. Multi-token Value Extraction
+    val_tokens = []
+    for token in doc:
+        if token.dep_ in ("pobj", "dobj", "attr"):
+            chunk = [t for t in token.subtree if t.dep_ in ("compound", "amod", "flat", "pobj", "dobj", "attr") or t == token]
+            chunk.sort(key=lambda t: t.i)
+            val_text = " ".join(t.text for t in chunk).strip(".,!?\"'")
+            if val_text and val_text.lower() not in USER_PRONOUNS and val_text.lower() != entity.lower():
+                val_tokens.append(val_text)
+
+    if not val_tokens:
+        for chunk in doc.noun_chunks:
+            chunk_text = chunk.text.strip(".,!?\"'")
+            if chunk_text.lower() not in USER_PRONOUNS and chunk_text.lower() != (subj_token.text.lower() if subj_token else ""):
+                val_tokens.append(chunk_text)
+
+    value = val_tokens[-1].strip() if val_tokens else ""
+
+    if not value or value.lower() in ("this", "that", "it", "something", "anything"):
+        if attribute:
+            return KnowledgeFact(
+                entity=entity,
+                attribute=attribute,
+                value=value or "unknown",
+                fact_type=fact_type,
+                temporal_info="current",
+                confidence=0.35,
+            )
+        return None
+
+    # 4. Temporal Classification
+    temporal_info = "current"
+    text_lower = raw_text.lower()
+    past_indicators = {"lived", "worked", "was", "used to", "previously", "before", "formerly"}
+    future_indicators = {"will", "going to", "tomorrow", "next"}
+
+    if any(ind in text_lower for ind in past_indicators) or (verb_token and verb_token.tag_ in ("VBD", "VBN")):
+        temporal_info = "past"
+    elif any(ind in text_lower for ind in future_indicators):
+        temporal_info = "future"
+
+    # 5. Deterministic Confidence Calculation
+    confidence = 0.60
+    if attribute and value:
+        confidence += 0.25
+    if len(value.split()) > 1 or value[0].isupper():
+        confidence += 0.10
+    confidence = min(confidence, 0.95)
+
+    return KnowledgeFact(
+        entity=entity,
+        attribute=attribute or "general",
+        value=value,
+        fact_type=fact_type,
+        temporal_info=temporal_info,
+        confidence=confidence,
+    )

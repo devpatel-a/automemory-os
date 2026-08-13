@@ -31,7 +31,7 @@ def is_merge_equivalent(new_parsed, existing_mem, distance=None) -> bool:
     existing_fact = extract_fact(existing_parsed)
 
     # 2. Structured Facts Check: MERGE only if entity, attribute, and value match
-    if new_fact and existing_fact:
+    if new_fact and existing_fact and new_fact.attribute and existing_fact.attribute:
         norm_n_ent = new_fact.entity.strip().lower()
         norm_n_attr = new_fact.attribute.strip().lower()
         norm_n_val = new_fact.value.strip().lower()
@@ -79,7 +79,7 @@ def classify_knowledge(
     # 1. Scan candidates for strict fact UPDATE (same entity + same attribute + different value)
     if parsed_memory is not None:
         new_fact = extract_fact(parsed_memory)
-        if new_fact is not None:
+        if new_fact is not None and new_fact.attribute:
             norm_entity = new_fact.entity.strip().lower()
             norm_attribute = new_fact.attribute.strip().lower()
             norm_value = new_fact.value.strip().lower()
@@ -89,7 +89,7 @@ def classify_knowledge(
                 if hasattr(cand_mem, "content"):
                     existing_parsed = parse_memory(cand_mem.content)
                     existing_fact = extract_fact(existing_parsed)
-                    if existing_fact is not None:
+                    if existing_fact is not None and existing_fact.attribute:
                         ex_entity = existing_fact.entity.strip().lower()
                         ex_attribute = existing_fact.attribute.strip().lower()
                         ex_value = existing_fact.value.strip().lower()

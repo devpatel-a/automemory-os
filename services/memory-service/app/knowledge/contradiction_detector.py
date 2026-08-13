@@ -1,12 +1,6 @@
 from app.understanding.models import ParsedMemory
-
-
-PROFILE_KEYWORDS = [
-    "live",
-    "name",
-    "age",
-    "born",
-]
+from app.knowledge.fact_extractor import extract_fact
+from app.understanding.memory_parser import parse_memory
 
 
 def detect_contradiction(
@@ -14,27 +8,30 @@ def detect_contradiction(
     existing_memory,
 ) -> bool:
     """
-    Rule-based contradiction detector.
-    Handles Memory objects, (Memory, distance) tuples, and strings.
+    Generic fact domain contradiction detector.
+    Returns True ONLY if incoming and existing facts share entity + attribute with differing values.
+    Unrelated attributes never contradict.
     """
     if isinstance(existing_memory, (tuple, list)):
         existing_memory = existing_memory[0]
 
-    if isinstance(existing_memory, str):
-        existing_text = existing_memory.lower()
-    elif hasattr(existing_memory, "content"):
-        existing_text = existing_memory.content.lower()
-    else:
+    if not hasattr(existing_memory, "content") and not isinstance(existing_memory, str):
         return False
 
-    new_text = new_memory.content.lower()
+    existing_parsed = (
+        parse_memory(existing_memory)
+        if isinstance(existing_memory, str)
+        else parse_memory(existing_memory.content)
+    )
 
-    for keyword in PROFILE_KEYWORDS:
+    new_fact = extract_fact(new_memory)
+    existing_fact = extract_fact(existing_parsed)
+
+    if new_fact and existing_fact and new_fact.attribute and existing_fact.attribute:
         if (
-            keyword in new_text
-            and keyword in existing_text
-            and new_text != existing_text
+            new_fact.entity.strip().lower() == existing_fact.entity.strip().lower()
+            and new_fact.attribute.strip().lower() == existing_fact.attribute.strip().lower()
         ):
-            return True
+            return new_fact.value.strip().lower() != existing_fact.value.strip().lower()
 
     return False
