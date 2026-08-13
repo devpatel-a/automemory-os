@@ -1,34 +1,19 @@
 from app.context.models import ContextCandidate
-
-
-IMPORTANCE_WEIGHT = 0.25
-
-ACCESS_WEIGHT = 0.20
+from app.context.evidence_evaluator import evaluate_evidence
 
 
 def calculate_context_score(
     candidate: ContextCandidate,
+    query: str = "",
+    query_entities: list | None = None,
 ) -> float:
     """
-    Final ranking score for a
-    retrieved memory.
+    Unified entry point for Context Evidence Scoring.
+    Delegates to evaluate_evidence to enforce one authoritative scoring path.
     """
-
-    memory = candidate.memory
-
-    score = candidate.score
-
-    score += memory.importance * IMPORTANCE_WEIGHT
-
-    score += (
-
-        min(
-            memory.access_count / 10,
-            1,
-        )
-
-        * ACCESS_WEIGHT
-
+    evaluated = evaluate_evidence(
+        candidate=candidate,
+        query=query,
+        query_entities=query_entities or [],
     )
-
-    return score
+    return evaluated.evidence_score

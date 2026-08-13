@@ -10,6 +10,7 @@ def retrieve_memories(
     db,
     query: str,
     limit: int = 5,
+    include_archived: bool = False,
 ):
     """
     Central Hybrid Retrieval API with Candidate Fusion & Multi-Signal Feature Ranking.
@@ -60,10 +61,11 @@ def retrieve_memories(
     keyword_mids = set()
     if words:
         for word in words[:3]:
+            q = db.query(Memory.id)
+            if not include_archived:
+                q = q.filter(Memory.state != "archived")
             kw_mems = (
-                db.query(Memory.id)
-                .filter(Memory.state != "archived")
-                .filter(Memory.content.ilike(f"%{word}%"))
+                q.filter(Memory.content.ilike(f"%{word}%"))
                 .limit(10)
                 .all()
             )
@@ -103,11 +105,11 @@ def retrieve_memories(
     # 4. Bulk Fetch missing Memory objects in a SINGLE database query to avoid N+1 issues
     all_needed_mids = (keyword_mids | graph_mids) - set(candidate_map.keys())
     if all_needed_mids:
-        missing_memories = (
-            db.query(Memory)
-            .filter(Memory.id.in_(all_needed_mids), Memory.state != "archived")
-            .all()
-        )
+        q_missing = db.query(Memory).filter(Memory.id.in_(all_needed_mids))
+        if not include_archived:
+            q_missing = q_missing.filter(Memory.state != "archived")
+        missing_memories = q_missing.all()
+
         for memory in missing_memories:
             candidate_map[memory.id] = {
                 "memory": memory,
@@ -121,8 +123,8 @@ def retrieve_memories(
     for item in candidate_map.values():
         memory = item["memory"]
 
-        # Archived memories are strictly excluded
-        if getattr(memory, "state", None) == "archived":
+        # If not include_archived, archived memories are strictly excluded
+        if not include_archived and getattr(memory, "state", None) == "archived":
             continue
 
         score = compute_hybrid_rank_score(

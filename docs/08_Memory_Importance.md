@@ -2,39 +2,65 @@
 
 The Memory Engine assigns an importance score when a memory is created.
 
-Current rule-based scores:
+## Current Rule-Based Scores
 
-- Profile → 0.95
-- Preference → 0.80
-- Habit → 0.70
-- Event → 0.50
-- Default → 0.40¸
+The current implementation uses category-based importance:
 
-This score will later be used for ranking, retrieval, and forgetting strategit
+| Category | Importance |
+|---|---:|
+| Profile | 0.95 |
+| Preference | 0.80 |
+| Habit | 0.70 |
+| Event | 0.50 |
+| Default | 0.40 |
 
-# Memory Retrieval
+These values are currently defined by the Memory Engine's
+`calculate_importance()` function.
 
-The Memory Engine retrieves memories ordered by importance.
+---
 
-Current strategy:
+# Importance During Retrieval
 
-ORDER BY importance DESC
+Importance is no longer the only retrieval signal.
 
-Future improvements:
+The current retrieval system combines importance with additional signals,
+including:
 
-- Recency
-- Access Count
-- Semantic Similarity
-- Hybrid Ranking
+- semantic relevance
+- keyword relevance
+- graph relevance
+- recency
+- access strength
+- category relevance
+- contradiction state
+
+The current hybrid retrieval ranking is documented in:
+
+`CURRENT_RETRIEVAL.md`
+
+and:
+
+`CURRENT_ARCHITECTURE.md`
+
+Importance therefore acts as one ranking feature rather than being the
+sole determinant of relevance.
+
+---
 
 # Memory Access Tracking
 
-Each time a memory is retrieved:
+When memories are retrieved through the Memory Engine's retrieval
+operations:
 
-- access_count is incremented.
-- last_accessed is updated.
+- `access_count` is incremented.
+- `last_accessed` is updated.
 
-These metrics help determine which memories are actively used and support future ranking and forgetting strategies.
+These values provide additional information about memory usage.
+
+Access strength is currently used as a weak ranking signal rather than
+being allowed to dominate semantic relevance.
+
+---
 
 # Memory Search
 
@@ -44,8 +70,25 @@ The Memory Engine supports filtering by:
 - Minimum importance
 - Keyword
 
-Multiple filters can be combined to retrieve only the most relevant memories.
+Keyword filtering uses SQL `ILIKE` for case-insensitive substring
+matching in the direct memory-search functionality.
 
-Current keyword search uses SQL ILIKE for case-insensitive matching.
+This direct keyword filtering is distinct from the current hybrid
+retrieval system.
 
-Future versions will replace keyword search with semantic vector search.
+---
+
+# Semantic Retrieval
+
+Semantic vector retrieval is already implemented.
+
+The current semantic retrieval system uses:
+
+```text
+SentenceTransformer
+        ↓
+384-dimensional embedding
+        ↓
+pgvector
+        ↓
+Cosine-distance search

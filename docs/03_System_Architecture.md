@@ -2,130 +2,48 @@
 
 ## Overview
 
-AutoMemory OS is divided into independent services.
-
-Each service has one responsibility and communicates with other services through APIs.
+AutoMemory OS consists of a core production AI Memory Service alongside conceptual system interfaces.
 
 ---
 
-## Services
+## Architecture Boundaries
 
-### Memory Service
+### A. Product Vision & Conceptual Interfaces
 
-Responsible for:
+The conceptual product vision includes external auxiliary domain services (e.g., Vehicle Service, Recommendation Service, Agent Service). These represent future multi-agent ecosystem integrations.
 
-- Storing memories
-- Retrieving memories
-- Updating memories
-- Forgetting memories
+### B. Current Repository Implementation
 
----
-
-### Context Service
-
-Responsible for:
-
-- Current location
-- Weather
-- Time
-- Battery
-- Vehicle context
+The current codebase is concentrated in `services/memory-service/` implementing a production Python/FastAPI memory engine backed by PostgreSQL (`pgvector`), SQLAlchemy, and in-memory Knowledge Graph processing.
 
 ---
 
-### Vehicle Service
+## Core Memory Service Architecture
 
-Responsible for:
-
-- Vehicle state
-- Speed
-- Temperature
-- Battery level
-- Sensors
-
----
-
-### Recommendation Service
-
-Responsible for:
-
-- Route suggestions
-- Charging suggestions
-- Restaurant suggestions
-
----
-
-### Agent Service
-
-Responsible for:
-
-- AI reasoning
-- Task planning
-- Tool execution
-
----
-
-## Memory Service Endpoints
-
-- GET /
-- GET /health
-- GET /memory
-- GET /info
-
----
-
-## Memory Model
-
-The Memory Service accepts incoming memory data through a request body.
-
----
-
-### Schema
-
-```text
-Memory
-│
-└── memory : string
 ```
----
-
-### Example Request
-
-```json
-{
-  "memory": "Driver prefers coffee after 2 hours of driving."
-}
+FastAPI Web App (main.py / routes.py)
+  ↓
+Memory Pipeline (app/pipeline/memory_pipeline.py)
+  ├─ Understanding Engine (app/understanding/)
+  ├─ Retrieval Engine (app/retrieval_service.py, app/semantic/)
+  ├─ Knowledge Engine (app/knowledge/)
+  ├─ Decision Engine (app/decision/)
+  ├─ Memory Evolution Engine (app/service.py)
+  └─ Knowledge Graph System (app/graph/)
+  ↓
+Database Layer (PostgreSQL + pgvector + SQLAlchemy)
 ```
----
-
-### Validation
-
-The Memory Service uses **Pydantic** to validate incoming requests.
-
-Rules:
-
-- `memory` is required.
-- `memory` must be a string.
-- Invalid requests return **HTTP 422 Unprocessable Content**.
 
 ---
 
-## Memory Service Endpoints
+## API Endpoints (`routes.py` / `main.py`)
 
 | Method | Endpoint | Purpose |
-|---------|----------|---------|
-| GET | /memory | Retrieve all memories |
-| POST | /memory | Create a new memory |
-| PUT | /memory/{memory_id} | Update a memory |
-| DELETE | /memory/{memory_id} | Delete a memory |
-
----
-
-## Memory Service Architecture
-
-The Memory Service is divided into layers:
-
-- **main.py** – Starts the FastAPI application.
-- **routes.py** – Defines API endpoints.
-- **models.py** – Defines request models.
-- **service.py** – Contains business logic.
+| :--- | :--- | :--- |
+| `GET` | `/` | Service root status |
+| `GET` | `/health` | Health check |
+| `GET` | `/memory` | Retrieve active memories |
+| `POST` | `/memory` | Process & store new memory via pipeline |
+| `PUT` | `/memory/{memory_id}` | Update memory |
+| `DELETE` | `/memory/{memory_id}` | Delete/archive memory |
+| `GET` | `/info` | Service metadata |

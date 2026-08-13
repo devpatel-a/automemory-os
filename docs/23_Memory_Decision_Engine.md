@@ -1,18 +1,30 @@
 # Memory Decision Engine
 
-The Memory Decision Engine determines how a new memory should be handled.
+## Purpose
 
-Current decisions:
+The Decision Engine ([app/decision/decision_engine.py](file:///Users/devpatel/Desktop/AutoMemory%20OS/services/memory-service/app/decision/decision_engine.py)) maps knowledge classification outputs (`KnowledgeDecision`) to concrete memory storage actions (`MemoryAction`).
 
-- NEW
-- IGNORE
-- REINFORCE
-- RELATED
+---
 
-Future decisions:
+## Current Supported Actions (`MemoryAction` Enum)
 
-- UPDATE
-- CONTRADICTION
-- MERGE
+- `STORE`: Create new active memory.
+- `REINFORCE`: Strengthen existing memory.
+- `UPDATE`: Update existing memory in-place.
+- `MERGE`: Merge redundant memory into canonical memory.
+- `ARCHIVE`: Archive contradicted memory.
+- `IGNORE`: Ignore incoming memory.
+- `RELATED`: Store new memory and establish a relationship.
 
-The engine is pure business logic and does not modify the database.
+---
+
+## Mapping Logic
+
+| Input `KnowledgeDecision` | Evaluated `MemoryAction` |
+| :--- | :--- |
+| `KnowledgeDecision.NEW` | `MemoryAction.STORE` |
+| `KnowledgeDecision.REINFORCE` | `MemoryAction.REINFORCE` |
+| `KnowledgeDecision.UPDATE` | `MemoryAction.UPDATE` |
+| `KnowledgeDecision.MERGE` | `MemoryAction.MERGE` |
+| `KnowledgeDecision.CONTRADICTION` | `MemoryAction.ARCHIVE` |
+| `KnowledgeDecision.RELATED` | `MemoryAction.RELATED` |

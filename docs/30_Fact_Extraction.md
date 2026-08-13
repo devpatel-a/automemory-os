@@ -1,25 +1,23 @@
 # Fact Extraction
 
-The Fact Extraction Engine converts structured memories into atomic knowledge facts.
+## Purpose
 
-A fact consists of:
+The Fact Extractor ([app/knowledge/fact_extractor.py](file:///Users/devpatel/Desktop/AutoMemory%20OS/services/memory-service/app/knowledge/fact_extractor.py)) parses structured memory representations into atomic `KnowledgeFact` objects.
 
-- Entity
-- Attribute
-- Value
+---
 
-Example:
+## Current Fact Schema
 
-Sentence:
+A `KnowledgeFact` contains:
+- `entity`: Lowercase normalized subject entity (e.g. `"user"`).
+- `attribute`: Lowercase normalized attribute (e.g. `"residence"`, `"workplace"`).
+- `value`: Lowercase normalized fact value (e.g. `"pune"`, `"google"`).
 
-"I live in Pune."
+---
 
-Fact:
+## Pattern Extraction Support
 
-entity: user
-
-attribute: residence
-
-value: Pune
-
-The Knowledge Engine reasons over facts rather than raw text.
+Rule-based pattern matching extracts facts from statements such as:
+- `"I live in Pune."` → `entity="user"`, `attribute="residence"`, `value="pune"`
+- `"I work at Google."` → `entity="user"`, `attribute="workplace"`, `value="google"`
+- `"My name is Alex."` → `entity="user"`, `attribute="name"`, `value="alex"`

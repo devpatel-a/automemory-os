@@ -1,32 +1,18 @@
-from app.context.models import (
-    ContextCandidate,
-)
-
-from app.context.scoring import (
-    calculate_context_score,
-)
+from app.context.models import ContextCandidate
 
 
 def rank_candidates(
     candidates: list[ContextCandidate],
 ) -> list[ContextCandidate]:
     """
-    Rank candidates by their
-    final retrieval score.
+    Rank candidates by their final evidence score descending.
     """
-
-    for candidate in candidates:
-
-        candidate.score = calculate_context_score(
-            candidate,
-        )
-
     return sorted(
-
         candidates,
-
-        key=lambda candidate: candidate.score,
-
+        key=lambda candidate: (
+            candidate.evidence_score
+            if candidate.evidence_score > 0
+            else candidate.score
+        ),
         reverse=True,
-
     )

@@ -1,25 +1,25 @@
 # Semantic Duplicate Detection
 
-AutoMemory OS no longer relies only on exact string matching.
+## Purpose
 
-Workflow:
+Prevents redundant storage of semantically equivalent memories.
 
-New Memory
+---
 
-↓
+## Current Implementation Workflow
 
-Embedding
+```
+New Memory Text
+  ↓
+Generate Vector Embedding (SentenceTransformer)
+  ↓
+pgvector Cosine Distance Search (semantic_search)
+  ↓
+Knowledge Classification & Merge Equivalence (is_merge_equivalent)
+  ↓
+Decision: REINFORCE / UPDATE / MERGE / NEW
+```
 
-↓
-
-Semantic Search
-
-↓
-
-Similarity Threshold
-
-↓
-
-Duplicate or Store
-
-This prevents storing multiple memories with the same meaning.
+- **Exact Duplicate**: Triggers `REINFORCE` (increments access count and importance).
+- **Fact Value Transition**: Triggers `UPDATE` (updates existing memory in-place).
+- **Semantically Equivalent**: Triggers `MERGE` (consolidates canonical memory and archives redundant duplicate).
