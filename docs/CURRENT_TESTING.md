@@ -1,70 +1,53 @@
-# Current Testing Reference
+# Current Testing & Verification Reference
 
-## Overview
+## Verified Test Suite Execution
 
-The repository contains a complete automated test suite covering memory persistence, vector search, knowledge graph indexing, memory evolution, hybrid candidate retrieval, context optimization, and v0.7 Memory Intelligence.
+The AutoMemory OS test suite validates system correctness across unit, integration, knowledge classification, temporal reasoning, graph consistency, and context optimization tests.
 
----
-
-## Verified Test Execution Status
-
-- **Full Test Suite Status**: **102 passed, 0 failed, 0 skipped**
-- **Execution Time**: **23.96 seconds**
-- **Verified Environment**: Verified in the development virtual environment.
-
-### Test Execution Command
-
+### Verification Command
 ```bash
 python -m pytest -q
 ```
 
----
-
-## v0.7 Memory Intelligence Test Coverage (`test_memory_intelligence.py`)
-
-The Memory Intelligence test suite verifies:
-
-- **Acceptance Tests A–M**:
-  - Test A: Preference extraction (`"I prefer espresso."`)
-  - Test B: Location extraction (`"I live in Pune."`)
-  - Test C: Employment extraction (`"I work at Google."`)
-  - Test D: Learning topic extraction (`"I am learning FastAPI."`)
-  - Test E: Multi-token value preservation (`"I live in New York."` $\rightarrow$ `New York`)
-  - Test F: Paraphrase normalization across varied syntactic expressions (`"I live in Pune."`, `"I am living in Pune."`, `"My current city is Pune."`)
-  - Test G: UPDATE classification for residence transitions (`Mumbai` $\rightarrow$ `Pune`)
-  - Test H: REINFORCEMENT for duplicate preference claims
-  - Test I: Unrelated facts (`location` vs `preference`) never UPDATE or MERGE
-  - Test J: Contradiction operates strictly on comparable fact domains
-  - Test K: Entity separation (`"My company is Google."` $\rightarrow$ entity=`user`, attribute=`employer`, value=`Google`)
-  - Test L: Unknown/ambiguous input (`"I really like this."`) avoids hallucinating attributes
-  - Test M: Generic extraction across coffee, city, company, programming, device, sport without domain-specific branches
-- **Non-User Entity Extraction Tests**:
-  - `"My friend Rahul works at Google."` $\rightarrow$ `entity = Rahul`, `attribute = employer`, `value = Google`
-  - `"My brother lives in Pune."` $\rightarrow$ `entity = brother`, `attribute = residence`, `value = Pune`
-- **Required Object-Context Tests**:
-  - `"I use a MacBook Air."` $\rightarrow$ `attribute = device`, `fact_type = DEVICE`
-  - `"I use a computer for work."` $\rightarrow$ `attribute = device`, `fact_type = DEVICE`
-  - `"I use a workstation."` $\rightarrow$ `attribute = device`, `fact_type = DEVICE`
-  - `"I use Python for work."` $\rightarrow$ `attribute = tool` / `usage` (NOT `device`)
-  - `"I use Python."` $\rightarrow$ `attribute = tool` / `usage` (NOT `device`)
-  - `"I use a programming language."` $\rightarrow$ `attribute = tool` / `usage` (NOT `device`)
-- **Temporal Sentence Tests**:
-  - `"I lived in Mumbai before moving to Pune."` $\rightarrow$ past temporal indicator detected, primary location Pune preserved. Verifies documented single-fact contract: compound sentences containing multiple temporal facts produce a single primary fact with coarse temporal information.
-- **Negative Structural Tests**: Verifies non-user entities (`Rahul`, `brother`) are not converted to `user`, and verbs without device context (`use Python for work`) are not assigned `device`.
-- **Confidence Monotonicity Tests**: Clear complete facts score higher confidence than ambiguous demonstrative text.
-- **Memory Pipeline End-to-End Integration**: Raw input $\rightarrow$ `MemoryPipeline` $\rightarrow$ `Understanding` $\rightarrow$ `Knowledge` $\rightarrow$ `Decision` $\rightarrow$ `Memory Evolution`.
+### Final Verified Results (v0.8 Milestone)
+- **Collected**: 116 tests
+- **Passed**: 116 passed
+- **Failed**: 0 failed
+- **Skipped**: 0 skipped
+- **Execution Time**: 20.17 seconds (environment baseline: 20.17s – 20.80s)
+- **Success Rate**: 116 / 116 tests passed (100% test pass rate)
 
 ---
 
-## Test Suite Module Distribution
+## Test Coverage Categories
 
-| Test Module | Coverage Area |
-| :--- | :--- |
-| **`test_memory_intelligence.py`** | Generic linguistic fact extraction, attribute normalization, non-user entity extraction, conservative verb object semantics, paraphrase normalization, fact-driven UPDATE/MERGE/CONTRADICTION classification, confidence monotonicity, end-to-end `MemoryPipeline` integration. |
-| **`test_context_optimization.py`** | Evidence relevance, current vs historical queries, contradiction lineage, merge safety, Jaccard diversity, multi-memory token budget (>1200 chars), negative cases A–J, empty candidate handling. |
-| **`test_intelligent_retrieval.py`** | Candidate fusion across Semantic, Keyword, and Graph sources; single query embedding generation; active replacement ranking; robust graph term discovery; ContextEngine compatibility. |
-| **`test_correctness_pass.py`** | Process-level shared graph state across `GraphService` instances; residence and workplace UPDATE transitions; unsafe update prevention; MERGE relationship safety without duplicate relationship records; MERGE state preservation; hybrid retrieval source integration. |
-| **`test_evolution.py`** | Memory evolution state machine transitions (`create_memory`, `reinforce_existing_memory`, `update_existing_fact_memory`, `merge_existing_memories`, `contradict_existing_memory`). |
-| **`test_contradiction.py`** | Contradiction detection rules, lineage linking (`contradicted_by_id`), and archival safety. |
-| **`test_graph_repository.py` & `test_graph.py`** | In-memory graph node/edge storage, graph search indexing, and thread-safe process sharing. |
-| **`test_context.py`** | ContextEngine multi-stage context building and token budget optimization. |
+1. **v0.7 Baseline & Regression Coverage**:
+   - Zero product value hardcoding verification across coffee, city, company, programming, device, sport.
+   - Object semantics (MacBook Air/computer/workstation → device vs Python/programming language → tool).
+   - Non-user entity extraction (Rahul, brother).
+   - Paragraph/paraphrase normalization.
+
+2. **Temporal Reasoning & Fact States**:
+   - Current fact state classification (`CURRENT`).
+   - Historical fact state classification (`HISTORICAL`).
+   - Future plan fact state classification (`FUTURE`).
+
+3. **Supersession & Contradiction Separation**:
+   - Fact transition supersession (`"I lived in Mumbai."` $\rightarrow$ `"I moved to Pune."`) preserving historical memories in DB (`state = "active"`, `is_contradicted = False`, linked via `MemoryRelationship("superseded_by")`).
+   - Incompatible current assertion contradiction (`"I live in Mumbai."` $\rightarrow$ `"I live in Pune."` without transition phrasing) marking old memory `is_contradicted = True`, `state = "archived"`.
+
+4. **Future Preservation & Non-Unique Values**:
+   - Preservation of `CURRENT` facts alongside incoming `FUTURE` facts without premature supersession.
+   - Non-unique value transition sequences (`Mumbai` $\rightarrow$ `Pune` $\rightarrow$ `Mumbai`) preserving object identity across distinct memory records.
+
+5. **No-Longer Negation Semantics**:
+   - Negated transition statements (`"I do not live in Mumbai anymore."`) updating existing facts to `HISTORICAL` without fabricating replacement values or storing fake `"unknown"` entries.
+
+6. **Entity Relationships & Graph Safety**:
+   - Explicit entity-to-user relationships (`"My friend Rahul works at Google."` $\rightarrow$ `user --friend_of--> rahul`).
+   - Non-user subject relationship safety (`"Rahul works at Google."` $\rightarrow$ `rahul --works_at--> google`, preventing false `user --works_with--> rahul` edges).
+   - Conservative entity resolution (`Rahul Patel` vs `Rahul Sharma`).
+
+7. **Context Engine & Shared Graph Consistency**:
+   - Temporal query intent preference (`CURRENT` queries prefer current facts; `HISTORICAL` queries prefer historical facts).
+   - Process-shared thread-safe Knowledge Graph synchronization across independent service instances.

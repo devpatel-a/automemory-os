@@ -2,7 +2,7 @@
 
 ## Overview
 
-AutoMemory OS is a 7-stage modular architecture for continuous user memory ingestion, evolution, candidate retrieval, context optimization, and knowledge graph reasoning.
+AutoMemory OS is a 7-stage modular architecture for continuous user memory ingestion, evolution, candidate retrieval, context optimization, temporal fact reasoning, and knowledge graph integration.
 
 ---
 
@@ -24,32 +24,37 @@ Natural Language User Input
       ↓
 3. Knowledge Reasoning Engine (app/knowledge/):
    • Generic linguistic fact extraction (extract_fact)
-   • Entity Extraction → Attribute Extraction → Value Extraction → Fact Normalization → Fact Type → Temporal Info → Confidence
+   • Entity Extraction → Attribute Extraction → Value Extraction → Fact Normalization → Temporal State → Relationship Context → Confidence
    • Generic spaCy dependency parsing, POS tags, noun chunks, grammatical subject, object structure
    • Zero memory-content value checks (no coffee, espresso, Pune, Google, Python, MacBook, iPhone, etc.)
    • Object Semantics: Deterministic & conservative classification (MacBook Air/computer/workstation → device vs Python/programming language → tool)
    • Structured fact domain comparison ((entity, attribute, value))
-   • Knowledge Classification (NEW, REINFORCEMENT, UPDATE, MERGE, CONTRADICTION, RELATED)
+   • Knowledge Classification (NEW, REINFORCEMENT, UPDATE, MERGE, CONTRADICTION, SUPERSESSION, RELATED)
       ↓
 4. Decision Engine (app/decision/):
    • Maps KnowledgeDecision → MemoryAction (STORE, REINFORCE, UPDATE, MERGE, ARCHIVE)
       ↓
 5. Memory Evolution Engine (app/service.py):
-   • In-place fact value updates (is_contradicted = False)
+   • Fact value transitions (SUPERSESSION) preserving historical memories in DB (state = "active")
    • Canonical memory consolidation with relationship transfer
-   • Contradiction target lineage linking (is_contradicted = True, contradicted_by_id = new_id)
+   • Contradiction lineage linking only for genuine contradictions (`is_contradicted = True`, `contradicted_by_id = new_id`)
+   • Supersession lineage uses `MemoryRelationship` (`relationship_type = "superseded_by"`) without contradiction flags
       ↓
 6. Knowledge Graph Indexing (app/graph/):
-   • Nodes (entities & concepts) and Edges (semantic relationships)
+   • Nodes (entities & concepts) and Edges (semantic relationships & explicit user relationships like friend_of, brother_of)
    • Thread-safe process-shared graph repository
       ↓
 7. Context Engine (app/context/):
-   • Evidence evaluation, conflict resolution, historical retrieval, Jaccard near-duplicate diversity, token budgeting (1200 chars), prompt package assembly (ContextPackage)
+   • Evidence evaluation, conflict resolution, temporal query intent (CURRENT, HISTORICAL, FUTURE), Jaccard near-duplicate diversity, token budgeting (1200 chars), prompt package assembly (ContextPackage)
 ```
 
 ---
 
-## Structured Fact Representation (`KnowledgeFact`)
+## Fact Representation (`KnowledgeFact`)
+
+Memory Intelligence operates on five core semantic dimensions:
+
+$$\text{ENTITY} + \text{ATTRIBUTE} + \text{VALUE} + \text{TEMPORAL STATE} + \text{RELATIONSHIP CONTEXT}$$
 
 The structured fact model ([app/knowledge/fact_models.py](file:///Users/devpatel/Desktop/AutoMemory%20OS/services/memory-service/app/knowledge/fact_models.py)) represents extracted natural language facts:
 
@@ -58,6 +63,43 @@ The structured fact model ([app/knowledge/fact_models.py](file:///Users/devpatel
 - **`value`**: Extracted value (multi-token phrase preserved, e.g. `New York`, `FastAPI`, `MacBook Air`).
 - **`fact_type`**: Semantic classification (`LOCATION`, `EMPLOYMENT`, `PREFERENCE`, `LEARNING`, `DEVICE`, `HABIT`, `PROFILE`, `OTHER`).
 - **`temporal_info`**: Coarse temporal signal (`current`, `past`, `future`).
+- **`temporal_state`**: Explicit temporal state (`CURRENT`, `HISTORICAL`, `FUTURE`, `UNKNOWN`).
+- **`relationship_to_user`**: Explicit entity-to-user relationship modifier (`friend`, `brother`, `colleague`, `boss`, etc., or `None` if unstated).
+- **`is_negated`**: Negation modifier flag (`"no longer"`, `"not anymore"`).
 - **`confidence`**: Deterministic score (`0.35` for ambiguous demonstratives, `0.60` base, up to `0.95` for complete facts).
 - **`evidence_count`**: Frequency counter for memory reinforcement.
 - **`contradiction_count`**: Historical contradiction tracking score.
+- **`superseded_by_id`**: Runtime Memory ID reference linking superseded fact lineage.
+
+---
+
+## Temporal Fact States
+
+- **`CURRENT`**: Facts representing the current state of truth (e.g. `"I live in Pune."`).
+- **`HISTORICAL`**: Facts representing past truth that was later superseded or explicitly stated in the past tense (e.g. `"I used to live in Mumbai."` or `"I moved to Pune."`).
+- **`FUTURE`**: Facts representing plans or predictions (e.g. `"I will move to Bangalore."`).
+- **`UNKNOWN`**: Facts where temporal orientation is unspecified or ambiguous.
+
+---
+
+## Memory Lifecycle State vs. Fact Temporal State
+
+AutoMemory OS strictly separates memory persistence lifecycle state from fact temporal state:
+
+1. **Memory Lifecycle State (`Memory.state`)**:
+   - `active`: Retrievable memory in active storage.
+   - `weak`: Memory decaying towards archival due to low access frequency.
+   - `archived`: Archived memory removed from default retrieval.
+
+2. **Fact Temporal State (`Fact.temporal_state`)**:
+   - `CURRENT`, `HISTORICAL`, `FUTURE`, `UNKNOWN`.
+
+A historical fact (`temporal_state = "HISTORICAL"`) remains in an `active` `Memory` (`state = "active"`) so it can be retrieved for historical questions (e.g., `"Where did I live before?"`).
+
+---
+
+## Supersession vs. Contradiction
+
+- **`SUPERSESSION != CONTRADICTION`**:
+  - **`SUPERSESSION`**: Occurs when a fact transitions over time (e.g. `"I lived in Mumbai."` followed by `"I moved to Pune."`). The old fact (`Mumbai`) becomes `HISTORICAL` while remaining stored as `state = "active"` with `is_contradicted = False`. Lineage is linked via `MemoryRelationship` (`relationship_type = "superseded_by"`).
+  - **`CONTRADICTION`**: Occurs when conflicting current assertions are made without transition evidence (e.g. `"I live in Mumbai."` followed by `"I live in Pune."`). The old conflicting memory is archived (`state = "archived"`, `is_contradicted = True`, `contradicted_by_id = new_memory_id`).

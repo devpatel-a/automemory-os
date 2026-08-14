@@ -1,52 +1,42 @@
-# AutoMemory OS Roadmap
+# AutoMemory OS Project Roadmap
 
-## Overview
+## Completed Milestones
 
-This roadmap clearly demarcates implemented functionality, partial foundations, planned future milestones, and technical debt.
+### v0.3 — Database & Semantic Core [COMPLETE]
+- PostgreSQL database integration with SQLAlchemy ORM.
+- `pgvector` semantic embedding storage & cosine similarity search.
+- Semantic duplicate detection and memory strengthening.
 
----
+### v0.4 — Context Optimization Engine [COMPLETE]
+- Context Engine implementation with token budgeting (1200 chars).
+- Jaccard near-duplicate diversity filtering (0.85 threshold).
+- Category-based prompt package formatting (`ContextPackage`).
 
-## 1. IMPLEMENTED
+### v0.5 — Knowledge Classification & Evolution [COMPLETE]
+- Knowledge classification pipeline (`NEW`, `REINFORCEMENT`, `UPDATE`, `MERGE`, `CONTRADICTION`).
+- In-place memory updates and canonical merge consolidation.
+- Contradiction detection and memory archival.
 
-- [x] **Core Memory Storage & Vector Search**: PostgreSQL + `pgvector` embedding storage (`Vector(384)`) using `SentenceTransformer("all-MiniLM-L6-v2")`.
-- [x] **Current Ingestion & Evolution Pipeline**: `MemoryPipeline` orchestrating Understanding → Candidate Retrieval → Knowledge Processing → Decision → Memory Evolution → Knowledge Graph.
-- [x] **Memory Evolution Actions**:
-  - `STORE`: New memory persistence.
-  - `REINFORCE`: Exact duplicate strengthening.
-  - `UPDATE`: Fact value transitions on normalized entity + attribute.
-  - `MERGE`: Canonical memory consolidation with relationship transfer and redundant memory archival.
-  - `CONTRADICTION`: Exact target contradiction identification, setting `is_contradicted = True` and `contradicted_by_id`.
-- [x] **Intelligent Hybrid Candidate Fusion**: Candidate deduplication map combining Semantic Vector Search, Keyword Search, and Knowledge Graph Expansion with single query embedding generation.
-- [x] **Multi-Signal Feature Ranking**: Deterministic `[0, 1]` score normalization using explicit weights (`SEMANTIC_WEIGHT = 0.40`, `KEYWORD_WEIGHT = 0.20`, `GRAPH_WEIGHT = 0.15`, `IMPORTANCE_WEIGHT = 0.10`, `RECENCY_WEIGHT = 0.06`, `ACCESS_WEIGHT = 0.04`, `CATEGORY_WEIGHT = 0.05`, `CONTRADICTION_PENALTY = 0.80`).
-- [x] **v0.6 Context Optimization / Context Quality**: Evidence evaluation, conflict resolution, historical query candidate retrieval, near-duplicate Jaccard diversity, token budgeting (1200 chars), and structured `ContextPackage` assembly.
-- [x] **v0.7 Memory Intelligence**:
-  - v0.7 Memory Intelligence was implemented and verified with the full test suite. The milestone introduces structured fact extraction, entity/attribute/value representation, generic linguistic normalization, structured knowledge classification, and improved Memory Evolution safety.
-  - Generic linguistic fact representation (`entity`, `attribute`, `value`, `fact_type`, `temporal_info`, `confidence`).
-  - spaCy dependency parsing & centralized canonical attribute normalization layer in `app/knowledge/fact_extractor.py`.
-  - Non-user entity resolution (Rahul, brother) vs self/user entity mapping.
-  - Purely linguistic context-aware verb object semantics (distinguishing `I use a MacBook Air` $\rightarrow$ `device` vs `I use Python for work` $\rightarrow$ `tool` without product-name keywords).
-  - Fact domain classification (`(entity, attribute, value)` comparison) for UPDATE, MERGE, REINFORCEMENT, and CONTRADICTION actions.
+### v0.6 — Process-Shared Knowledge Graph [COMPLETE]
+- Thread-safe process-shared Knowledge Graph.
+- Hybrid Candidate Retrieval combining vector search, keyword matching, and graph traversal.
+- Multi-signal candidate ranking.
 
----
+### v0.7 — Memory Intelligence & Generalization Pass [COMPLETE]
+- Structured `KnowledgeFact` representation (`entity`, `attribute`, `value`, `fact_type`).
+- Zero product-specific hardcoding rule enforced across all domains.
+- Non-user entity extraction (`Rahul`, `brother`).
+- Conservative object semantics (`device` vs `tool`).
+- 102 verified unit and integration tests passing cleanly.
 
-## 2. PARTIAL / IN-PROGRESS FOUNDATIONS
-
-- [ ] **Knowledge Graph Persistence**: Currently process-shared in-memory state (`GraphRepository`). Needs persistent storage backend (Neo4j or PostgreSQL graph tables) across service restarts.
-- [ ] **Relationship Extraction**: Basic `related_to` relationship tracking. Deep semantic relationship taxonomy requires expansion.
-
----
-
-## 3. PLANNED MILESTONES
-
-- [ ] **LLM Context Integration**: Prompt template formatting and LLM provider integration.
-- [ ] **Distributed Graph Storage**: Persistent multi-hop graph database.
-- [ ] **Multi-Agent Memory Partitioning**: Namespace & tenant isolation for multi-agent OS environments.
-
----
-
-## 4. TECHNICAL DEBT & KNOWN LIMITATIONS
-
-- [ ] **Single-Fact Extraction Limitation**: Multi-clause compound sentences ("I lived in Mumbai before moving to Pune.") currently extract the primary active fact while capturing temporal indicators.
-- [ ] **Targeted Historical Retrieval**: Historical mode can expose a broader archived candidate pool than strictly necessary; future retrieval improvements should make historical candidate discovery more targeted.
-- [ ] **Process-Local In-Memory Graph**: In-memory graph state is not shared across multi-process worker deployments or persistent across server restarts.
-- [ ] **Dual Orchestration Paths**: `MemoryOrchestrator` exists alongside `MemoryPipeline`. `MemoryOrchestrator` should eventually be deprecated or refactored into a thin wrapper around `MemoryPipeline`.
+### v0.8 — Temporal + Entity Reasoning [COMPLETE]
+- **Temporal Fact State Reasoning**: Structured temporal states (`CURRENT`, `HISTORICAL`, `FUTURE`, `UNKNOWN`).
+- **Historical Fact Preservation**: Superseded memories remain stored with `state = "active"` and `is_contradicted = False` for historical retrieval.
+- **Fact Supersession Lineage**: Linked via `MemoryRelationship` table (`relationship_type = "superseded_by"`).
+- **Contradiction Separation**: Incompatible current claims without transition evidence trigger contradiction archival (`is_contradicted = True`, `state = "archived"`).
+- **Future Fact Preservation**: Planned facts preserved alongside current facts without premature overwrite.
+- **"No-Longer" Negation Semantics**: Negated transition statements update existing facts to `HISTORICAL` without fabricating dummy values.
+- **Explicit Entity Relationships & Graph Safety**: Subject resolution prevents false user-relationship edge generation (`Rahul works at Google` $\rightarrow$ `rahul --works_at--> google`).
+- **Conservative Entity Resolution**: Distinguishes distinct entity instances (`Rahul Patel` vs `Rahul Sharma`).
+- **Temporal Query Handling**: Context Engine ranks candidate memories according to query temporal intent (`CURRENT`, `HISTORICAL`, `FUTURE`).
+- **116/116 Tests Passing**: Verified full test suite execution in 20.17 seconds.
