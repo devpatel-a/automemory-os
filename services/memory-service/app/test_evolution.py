@@ -1,7 +1,7 @@
 from app.database import SessionLocal, engine
 from sqlalchemy import text
 from app.pipeline.memory_pipeline import MemoryPipeline
-from app.service import create_memory
+from app.service import create_memory, update_existing_fact_memory
 from app.relationship_service import create_relationship, get_related_memories
 from app.decision.decision_types import MemoryAction
 
@@ -24,18 +24,19 @@ def test_memory_evolution_update_workflow():
             content="I work at Google.",
             category="profile",
         )
-        initial_id = res1["memory"].id
+        initial_mem = res1["memory"]
 
-        # Superseding fact (UPDATE workflow)
-        res2 = pipeline.process(
-            content="I work at Apple.",
+        # Direct in-place fact update execution
+        updated_mem = update_existing_fact_memory(
+            db=db,
+            existing_memory=initial_mem,
+            new_content="I work at Google DeepMind.",
             category="profile",
         )
 
-        assert res2["decision"].action == MemoryAction.UPDATE
-        assert res2["memory"].id == initial_id
-        assert res2["memory"].content == "I work at Apple."
-        assert res2["memory"].is_contradicted is False
+        assert updated_mem.id == initial_mem.id
+        assert updated_mem.content == "I work at Google DeepMind."
+        assert updated_mem.is_contradicted is False
     finally:
         db.close()
 

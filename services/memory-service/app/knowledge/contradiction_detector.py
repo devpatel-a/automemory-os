@@ -9,8 +9,8 @@ def detect_contradiction(
 ) -> bool:
     """
     Generic fact domain contradiction detector.
-    Returns True ONLY if incoming and existing facts share entity + attribute with differing values.
-    Unrelated attributes never contradict.
+    Returns True ONLY if incoming and existing facts share entity + attribute with differing values
+    and represent conflicting current claims without historical transition context or transition phrasing.
     """
     if isinstance(existing_memory, (tuple, list)):
         existing_memory = existing_memory[0]
@@ -18,11 +18,10 @@ def detect_contradiction(
     if not hasattr(existing_memory, "content") and not isinstance(existing_memory, str):
         return False
 
-    existing_parsed = (
-        parse_memory(existing_memory)
-        if isinstance(existing_memory, str)
-        else parse_memory(existing_memory.content)
+    existing_content = (
+        existing_memory if isinstance(existing_memory, str) else existing_memory.content
     )
+    existing_parsed = parse_memory(existing_content)
 
     new_fact = extract_fact(new_memory)
     existing_fact = extract_fact(existing_parsed)
@@ -32,6 +31,21 @@ def detect_contradiction(
             new_fact.entity.strip().lower() == existing_fact.entity.strip().lower()
             and new_fact.attribute.strip().lower() == existing_fact.attribute.strip().lower()
         ):
-            return new_fact.value.strip().lower() != existing_fact.value.strip().lower()
+            # Same value is never a contradiction
+            if new_fact.value.strip().lower() == existing_fact.value.strip().lower():
+                return False
+
+            # Explicit transition phrasing ("moved to", "transferred to", etc.) is NOT a contradiction
+            content_lower = new_memory.content.lower()
+            has_transition = any(tr in content_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
+            if has_transition:
+                return False
+
+            # If incoming fact is FUTURE or HISTORICAL, it is not a current claim contradiction
+            if new_fact.temporal_state in ("FUTURE", "HISTORICAL") or existing_fact.temporal_state == "HISTORICAL":
+                return False
+
+            # Direct contradiction on current claims without transition evidence
+            return True
 
     return False

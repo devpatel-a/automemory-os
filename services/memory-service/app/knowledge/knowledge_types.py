@@ -7,4 +7,5 @@ class KnowledgeDecision(str, Enum):
     UPDATE = "update"
     MERGE = "merge"
     CONTRADICTION = "contradiction"
+    SUPERSESSION = "supersession"
     RELATED = "related"

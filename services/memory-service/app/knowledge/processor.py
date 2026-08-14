@@ -23,22 +23,23 @@ def process_knowledge(
 
     Responsibilities:
     - Extract a structured knowledge fact
-    - Classify how new knowledge relates to existing knowledge (UPDATE, MERGE, REINFORCEMENT, CONTRADICTION, RELATED, NEW)
+    - Classify how new knowledge relates to existing knowledge (UPDATE, MERGE, REINFORCEMENT, CONTRADICTION, SUPERSESSION, RELATED, NEW)
     - Return a standardized KnowledgeResult
     """
     fact = extract_fact(parsed_memory)
 
-    # 1. Classification (handles UPDATE, MERGE, REINFORCEMENT, RELATED, NEW)
+    # 1. Classification (handles UPDATE, MERGE, REINFORCEMENT, SUPERSESSION, RELATED, NEW)
     decision = classify_knowledge(
         parsed_memory=parsed_memory,
         candidates=candidate_memories,
     )
 
-    # 2. Contradiction Check if not already classified as UPDATE, MERGE, or REINFORCEMENT
+    # 2. Contradiction Check if not already classified as UPDATE, SUPERSESSION, MERGE, or REINFORCEMENT
     if (
         decision
         not in (
             KnowledgeDecision.UPDATE,
+            KnowledgeDecision.SUPERSESSION,
             KnowledgeDecision.MERGE,
             KnowledgeDecision.REINFORCEMENT,
         )

@@ -13,7 +13,6 @@ def get_memory_object(item):
 
 
 def is_merge_equivalent(new_parsed, existing_mem, distance=None) -> bool:
-    # 1. Contradiction check: never merge contradictions
     if detect_contradiction(new_parsed, existing_mem):
         return False
 
@@ -30,7 +29,7 @@ def is_merge_equivalent(new_parsed, existing_mem, distance=None) -> bool:
     new_fact = extract_fact(new_parsed)
     existing_fact = extract_fact(existing_parsed)
 
-    # 2. Structured Facts Check: MERGE only if entity, attribute, and value match
+    # MERGE only if entity, attribute, value match and neither is negated
     if new_fact and existing_fact and new_fact.attribute and existing_fact.attribute:
         norm_n_ent = new_fact.entity.strip().lower()
         norm_n_attr = new_fact.attribute.strip().lower()
@@ -41,11 +40,12 @@ def is_merge_equivalent(new_parsed, existing_mem, distance=None) -> bool:
         norm_e_val = existing_fact.value.strip().lower()
 
         if norm_n_ent == norm_e_ent and norm_n_attr == norm_e_attr:
+            if new_fact.is_negated or existing_fact.is_negated:
+                return False
             return norm_n_val == norm_e_val
         else:
             return False
 
-    # 3. Category mismatch check (e.g. profile vs event)
     if (
         hasattr(new_parsed, "category")
         and hasattr(existing_parsed, "category")
@@ -53,7 +53,6 @@ def is_merge_equivalent(new_parsed, existing_mem, distance=None) -> bool:
     ):
         return False
 
-    # 4. Strict Semantic Equivalence Signal when structured facts are unavailable
     if distance is not None and distance >= 0.08:
         return False
 
@@ -76,13 +75,14 @@ def classify_knowledge(
     if not candidates:
         return KnowledgeDecision.NEW
 
-    # 1. Scan candidates for strict fact UPDATE (same entity + same attribute + different value)
     if parsed_memory is not None:
         new_fact = extract_fact(parsed_memory)
         if new_fact is not None and new_fact.attribute:
             norm_entity = new_fact.entity.strip().lower()
             norm_attribute = new_fact.attribute.strip().lower()
             norm_value = new_fact.value.strip().lower()
+            incoming_temporal = new_fact.temporal_state
+            content_lower = parsed_memory.content.lower()
 
             for item in candidates:
                 cand_mem = get_memory_object(item)
@@ -93,14 +93,35 @@ def classify_knowledge(
                         ex_entity = existing_fact.entity.strip().lower()
                         ex_attribute = existing_fact.attribute.strip().lower()
                         ex_value = existing_fact.value.strip().lower()
-                        if (
-                            ex_entity == norm_entity
-                            and ex_attribute == norm_attribute
-                            and ex_value != norm_value
-                        ):
-                            return KnowledgeDecision.UPDATE
+                        existing_temporal = existing_fact.temporal_state
 
-    # 2. Check for MERGE using explicit merge equivalence check
+                        if ex_entity == norm_entity and ex_attribute == norm_attribute:
+                            # Rule G: Negated statement ("I do not live in Mumbai anymore")
+                            if new_fact.is_negated and ex_value == norm_value:
+                                return KnowledgeDecision.SUPERSESSION
+
+                            # Rule A: Same value -> continue to MERGE/REINFORCEMENT
+                            if ex_value == norm_value:
+                                continue
+
+                            # Rule E & F: Incoming FUTURE fact -> PRESERVE BOTH (NEW)
+                            if incoming_temporal == "FUTURE":
+                                continue
+
+                            # Explicit transition evidence -> SUPERSESSION
+                            has_transition = any(tr in content_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
+                            if has_transition:
+                                return KnowledgeDecision.SUPERSESSION
+
+                            # Rule B: Existing HISTORICAL + Incoming CURRENT -> SUPERSESSION
+                            if existing_temporal == "HISTORICAL" and incoming_temporal == "CURRENT":
+                                return KnowledgeDecision.SUPERSESSION
+
+                            # Rule D: Existing CURRENT + Incoming CURRENT + NO transition evidence -> CONTRADICTION
+                            if incoming_temporal == "CURRENT" and not has_transition:
+                                return KnowledgeDecision.CONTRADICTION
+
+    # Check for MERGE / REINFORCEMENT
     if parsed_memory is not None:
         for item in candidates:
             cand_mem = get_memory_object(item)
@@ -118,7 +139,7 @@ def classify_knowledge(
                     return KnowledgeDecision.REINFORCEMENT
                 return KnowledgeDecision.MERGE
 
-    # 3. Distance classification against top candidate
+    # Distance classification against top candidate
     best_cand = candidates[0]
     best_mem = get_memory_object(best_cand)
     distance = (

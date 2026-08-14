@@ -91,7 +91,7 @@ def test_f_paraphrase_normalization():
 
 
 def test_g_update():
-    """Test G: UPDATE for existing location Mumbai vs incoming Pune."""
+    """Test G: SUPERSESSION for existing location Mumbai vs incoming transition to Pune."""
     clear_db()
     db = SessionLocal()
     try:
@@ -99,11 +99,11 @@ def test_g_update():
         res1 = pipeline.process("I live in Mumbai.", "profile")
         assert res1["decision"].action == MemoryAction.STORE
 
-        parsed2 = parse_memory("I live in Pune.")
+        parsed2 = parse_memory("I moved to Pune.")
         candidates = [(res1["memory"], 0.15)]
 
         decision = classify_knowledge(parsed2, candidates)
-        assert decision == KnowledgeDecision.UPDATE
+        assert decision == KnowledgeDecision.SUPERSESSION
     finally:
         db.close()
 
@@ -268,9 +268,7 @@ def test_object_context_programming_language_not_device():
 def test_temporal_compound_sentence_single_fact_contract():
     """
     Temporal Test: 'I lived in Mumbai before moving to Pune.'
-    Verifies the documented limitation:
-    'Compound sentences containing multiple temporal facts are not yet decomposed into separate structured facts.
-    The current extractor produces a single primary fact with coarse temporal information.'
+    Verifies documented limitation contract.
     """
     fact = extract_fact(parse_memory("I lived in Mumbai before moving to Pune."))
     assert fact is not None
@@ -356,8 +354,8 @@ def test_memory_pipeline_end_to_end_integration():
         assert res1["decision"].action == MemoryAction.STORE
         assert res1["memory"].content == "I work at Google."
 
-        res2 = pipeline.process("I work at Apple.", "profile")
+        res2 = pipeline.process("I transferred to Apple.", "profile")
         assert res2["decision"].action == MemoryAction.UPDATE
-        assert res2["memory"].content == "I work at Apple."
+        assert res2["memory"].content == "I transferred to Apple."
     finally:
         db.close()

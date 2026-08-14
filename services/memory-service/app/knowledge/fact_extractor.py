@@ -5,16 +5,35 @@ from app.understanding.models import ParsedMemory
 nlp = spacy.load("en_core_web_sm")
 
 USER_PRONOUNS = {"i", "me", "my", "myself"}
-RELATION_NOUNS = {"brother", "sister", "mother", "father", "friend", "colleague", "wife", "husband", "son", "daughter", "boss", "partner"}
-ABSTRACT_CONCEPT_NOUNS = {"language", "concept", "framework", "library", "code", "script", "method", "syntax", "service", "app", "software", "tool", "technique", "process", "strategy", "algorithm"}
+RELATION_NOUNS = {
+    "brother": "brother",
+    "sister": "sister",
+    "mother": "mother",
+    "father": "father",
+    "friend": "friend",
+    "colleague": "colleague",
+    "wife": "wife",
+    "husband": "husband",
+    "son": "son",
+    "daughter": "daughter",
+    "boss": "boss",
+    "manager": "manager",
+    "partner": "partner",
+}
+ABSTRACT_CONCEPT_NOUNS = {
+    "language", "concept", "framework", "library", "code", "script",
+    "method", "syntax", "service", "app", "software", "tool",
+    "technique", "process", "strategy", "algorithm"
+}
 
-# Centralized, inspectable linguistic normalization layer
 VERB_ATTRIBUTE_MAP = {
     "live": ("residence", "LOCATION"),
     "reside": ("residence", "LOCATION"),
     "stay": ("residence", "LOCATION"),
+    "move": ("residence", "LOCATION"),
     "work": ("employer", "EMPLOYMENT"),
     "employed": ("employer", "EMPLOYMENT"),
+    "transfer": ("employer", "EMPLOYMENT"),
     "prefer": ("preference", "PREFERENCE"),
     "like": ("preference", "PREFERENCE"),
     "love": ("preference", "PREFERENCE"),
@@ -48,7 +67,7 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     """
     Generic linguistic fact extractor using spaCy dependency parsing, POS tags,
     noun chunks, and centralized canonical attribute normalization.
-    Zero domain-specific string branching or product value keywords.
+    Does NOT depend on database IDs or memory persistence structures during NLP extraction.
     """
     if not memory or not memory.content or not memory.content.strip():
         return None
@@ -56,8 +75,9 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     raw_text = memory.content.strip()
     doc = nlp(raw_text)
 
-    # 1. Subject & Entity Resolution (Non-user entity vs self/user resolution)
+    # 1. Subject & Entity Resolution + Explicit Entity Relationship Extraction
     entity = "user"
+    relationship_to_user = None
     subj_token = None
     verb_token = None
 
@@ -74,6 +94,12 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     possessive_my = any(t.lower_ in USER_PRONOUNS and t.dep_ == "poss" for t in doc)
 
     if subj_token:
+        subtree_lemmas = [t.lemma_.lower() for t in subj_token.subtree]
+        for r_noun, r_rel in RELATION_NOUNS.items():
+            if r_noun in subtree_lemmas and possessive_my:
+                relationship_to_user = r_rel
+                break
+
         propn_tokens = [t.text for t in subj_token.subtree if t.pos_ == "PROPN" and t.lower_ not in USER_PRONOUNS]
         if propn_tokens:
             entity = " ".join(propn_tokens)
@@ -90,7 +116,6 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     fact_type = "OTHER"
     verb_lemma = verb_token.lemma_.lower() if verb_token else ""
 
-    # Strategy A: Copula "is/am/are" with possessive or noun subject
     if verb_token and verb_token.lemma_ in ("be", "is", "am", "are"):
         head_noun = None
         for token in doc:
@@ -102,7 +127,6 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         elif head_noun:
             attribute = head_noun
             fact_type = "PROFILE"
-    # Strategy B: Context-aware "use" verb object semantics (purely linguistic & conservative)
     elif verb_lemma == "use":
         dobj_token = None
         for token in doc:
@@ -111,7 +135,6 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
                 break
 
         has_determiner = False
-        head_lemma = ""
         is_abstract = False
         is_bare_propn = False
 
@@ -123,14 +146,10 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
 
         has_tool_adjunct = any(t.lower_ in ("for", "to") for t in doc)
 
-        # Conservative Generic Object Semantics:
-        # 1. Abstract concept nouns ("programming language") or bare proper nouns ("Python") or tool adjuncts ("for work") -> tool / OTHER
-        # 2. Concrete noun / compound phrase with determiner ("a MacBook Air", "a computer", "a workstation") -> device / DEVICE
         if dobj_token and not is_abstract and not is_bare_propn and (has_determiner or not has_tool_adjunct):
             attribute, fact_type = "device", "DEVICE"
         else:
             attribute, fact_type = "tool", "OTHER"
-    # Strategy C: Action/Stative Verb Normalization
     elif verb_lemma in VERB_ATTRIBUTE_MAP:
         attribute, fact_type = VERB_ATTRIBUTE_MAP[verb_lemma]
     elif verb_token:
@@ -163,20 +182,35 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
                 value=value or "unknown",
                 fact_type=fact_type,
                 temporal_info="current",
+                temporal_state="CURRENT",
                 confidence=0.35,
             )
         return None
 
-    # 4. Temporal Classification
+    # 4. Negation & Temporal State Classification
+    is_negated = any(t.dep_ == "neg" or t.lower_ in ("not", "no", "never", "anymore") for t in doc)
+    
     temporal_info = "current"
+    temporal_state = "CURRENT"
     text_lower = raw_text.lower()
-    past_indicators = {"lived", "worked", "was", "used to", "previously", "before", "formerly"}
-    future_indicators = {"will", "going to", "tomorrow", "next"}
+
+    past_indicators = {"lived", "worked", "was", "used to", "previously", "formerly", "before", "earlier", "last year"}
+    future_indicators = {"will", "going to", "tomorrow", "next", "future"}
+    has_transition = any(tr in text_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
 
     if any(ind in text_lower for ind in past_indicators) or (verb_token and verb_token.tag_ in ("VBD", "VBN")):
-        temporal_info = "past"
+        if has_transition:
+            temporal_info = "current"
+            temporal_state = "CURRENT"
+        else:
+            temporal_info = "past"
+            temporal_state = "HISTORICAL"
     elif any(ind in text_lower for ind in future_indicators):
         temporal_info = "future"
+        temporal_state = "FUTURE"
+
+    if is_negated and ("anymore" in text_lower or "longer" in text_lower or "no longer" in text_lower):
+        temporal_state = "HISTORICAL"
 
     # 5. Deterministic Confidence Calculation
     confidence = 0.60
@@ -192,5 +226,8 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         value=value,
         fact_type=fact_type,
         temporal_info=temporal_info,
+        temporal_state=temporal_state,
+        relationship_to_user=relationship_to_user,
+        is_negated=is_negated,
         confidence=confidence,
     )

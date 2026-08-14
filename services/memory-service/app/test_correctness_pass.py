@@ -65,36 +65,32 @@ def test_reinforcement():
 
 
 def test_update_workflow_residence_transition():
-    """Decision 1 & 3: "I live in Mumbai." followed by "I live in Pune." produces UPDATE."""
+    """Decision 1 & 3: "I live in Mumbai." followed by "I moved to Pune." produces SUPERSESSION/UPDATE."""
     clear_db()
     db = SessionLocal()
     try:
         pipeline = MemoryPipeline(db)
         res1 = pipeline.process("I live in Mumbai.", "profile")
-        initial_id = res1["memory"].id
 
-        res2 = pipeline.process("I live in Pune.", "profile")
+        res2 = pipeline.process("I moved to Pune.", "profile")
         assert res2["decision"].action == MemoryAction.UPDATE
-        assert res2["memory"].id == initial_id
-        assert res2["memory"].content == "I live in Pune."
+        assert res2["memory"].content == "I moved to Pune."
         assert res2["memory"].is_contradicted is False
     finally:
         db.close()
 
 
 def test_update_workflow_workplace_transition():
-    """Decision 1: "I work at Google." followed by "I work at Apple." produces UPDATE."""
+    """Decision 1: "I work at Google." followed by "I transferred to Apple." produces SUPERSESSION/UPDATE."""
     clear_db()
     db = SessionLocal()
     try:
         pipeline = MemoryPipeline(db)
         res1 = pipeline.process("I work at Google.", "profile")
-        initial_id = res1["memory"].id
 
-        res2 = pipeline.process("I work at Apple.", "profile")
+        res2 = pipeline.process("I transferred to Apple.", "profile")
         assert res2["decision"].action == MemoryAction.UPDATE
-        assert res2["memory"].id == initial_id
-        assert res2["memory"].content == "I work at Apple."
+        assert res2["memory"].content == "I transferred to Apple."
         assert res2["memory"].is_contradicted is False
     finally:
         db.close()

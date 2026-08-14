@@ -7,8 +7,7 @@ def decide(
     knowledge_result,
 ) -> DecisionResult:
     """
-    Decide what AutoMemory OS should do with
-    the incoming memory.
+    Decide what AutoMemory OS should do with the incoming memory.
     """
 
     decision = knowledge_result.decision
@@ -31,10 +30,10 @@ def decide(
             reason="Related memory stored separately.",
         )
 
-    if decision == KnowledgeDecision.UPDATE:
+    if decision in (KnowledgeDecision.UPDATE, KnowledgeDecision.SUPERSESSION):
         return DecisionResult(
             action=MemoryAction.UPDATE,
-            reason="Existing fact should be updated.",
+            reason="Fact supersession or update.",
         )
 
     if decision == KnowledgeDecision.MERGE:
