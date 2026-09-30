@@ -81,7 +81,8 @@ def calculate_access_score(access_count: int) -> float:
 def infer_query_category(query: str) -> str | None:
     """Infer intended memory category from query keywords."""
     q = query.lower()
-    if any(k in q for k in ["preference", "like", "favorite", "enjoy", "drink", "food", "love", "taste"]):
+    # Linguistic cues only (no domain values such as drinks or foods).
+    if any(k in q for k in ["preference", "prefer", "like", "favorite", "enjoy", "love"]):
         return "preference"
     if any(k in q for k in ["where", "live", "work", "name", "age", "profile", "born", "residence", "home"]):
         return "profile"

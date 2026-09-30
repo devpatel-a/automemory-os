@@ -16,8 +16,7 @@ CATEGORY_KEYWORDS = {
         "love",
         "prefer",
         "favorite",
-        "drink",
-        "eat",
+        "enjoy",
     ],
 
     "habit": [
