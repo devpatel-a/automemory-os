@@ -1,13 +1,11 @@
 from app.testing_support import reset_database
 from datetime import UTC, datetime, timedelta
-from app.database import SessionLocal, engine
-from sqlalchemy import text
+from app.database import SessionLocal
 from app.models import Memory
 from app.semantic.semantic_service import generate_embedding
 from app.retrieval_service import retrieve_memories
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.graph.graph_service import GraphService
-from app.graph.repository import reset_shared_graph
 from app.context.context_engine import ContextEngine
 
 

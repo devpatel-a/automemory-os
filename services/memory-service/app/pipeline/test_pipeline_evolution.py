@@ -56,7 +56,7 @@ def test_contradiction_target_recovered_by_wide_search(db, monkeypatch):
     """If classification reports CONTRADICTION without a target, the pipeline
     resolves the conflicting memory itself instead of losing the contradiction."""
     pipeline = MemoryPipeline(db)
-    old = pipeline.process("I live in Mumbai.", "profile")["memory"]
+    pipeline.process("I live in Mumbai.", "profile")
 
     def contradiction_without_target(parsed, candidates, historical=frozenset()):
         return KnowledgeResult(fact=None, decision=KnowledgeDecision.CONTRADICTION)

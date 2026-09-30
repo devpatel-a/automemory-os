@@ -15,7 +15,6 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
 
 from app.database import Base, engine as app_engine
 from app.testing_support import assert_test_database, run_migrations

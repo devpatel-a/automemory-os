@@ -1,9 +1,6 @@
 from app.nlp import parse_text
 from app.understanding.models import Entity
 
-from app.understanding.memory_entity_extractor import (
-    extract_memory_entities,
-)
 
 
 

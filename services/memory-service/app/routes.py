@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from . import service
 from .database import get_db
 from .context_service import build_context
-from .context.context_engine import ContextEngine
 from .agent_service import MemoryAgent
 from .pipeline.memory_pipeline import MemoryPipeline
 from .schemas import (

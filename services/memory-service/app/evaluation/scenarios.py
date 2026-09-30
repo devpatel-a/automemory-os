@@ -8,7 +8,7 @@ supersession pairs), graph edges and duplicate suppression against labels.
 Labels refer to memories by their exact statement text.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

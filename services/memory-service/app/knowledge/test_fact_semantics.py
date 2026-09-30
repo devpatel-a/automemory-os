@@ -4,12 +4,10 @@ Fact semantics regressions: value selection, attribute cardinality, planned
 (FUTURE) facts and multi-message evolution safety.
 """
 
-from sqlalchemy import text
 
-from app.database import SessionLocal, engine
+from app.database import SessionLocal
 from app.models import Memory
 from app.models_relationship import MemoryRelationship
-from app.graph.repository import reset_shared_graph
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.understanding.memory_parser import parse_memory
 from app.knowledge.fact_extractor import extract_fact

@@ -1,6 +1,5 @@
 from app.testing_support import reset_database
-from app.database import SessionLocal, engine
-from sqlalchemy import text
+from app.database import SessionLocal
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.service import create_memory, update_existing_fact_memory
 from app.relationship_service import create_relationship, get_related_memories

@@ -1,5 +1,4 @@
 from app.understanding.models import ParsedMemory
-from app.knowledge.fact_extractor import extract_fact
 from app.knowledge.classifier import assess_knowledge
 from app.knowledge.contradiction_detector import detect_contradiction
 from app.knowledge.knowledge_types import KnowledgeDecision
