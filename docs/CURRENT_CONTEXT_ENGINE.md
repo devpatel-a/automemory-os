@@ -55,3 +55,50 @@ Context packages present selected memories organized by functional category:
 - `habits`: Recurring routines and daily practices.
 - `events`: Historical occurrences and milestones.
 - `other`: Additional facts and general entity relationships.
+
+---
+
+## v0.9: Query-Aware, Lineage-Aware Context
+
+### Query Intent (`app/context/query_intent.py`)
+`analyze_query()` returns `QueryIntent(entity, attribute, temporal_intent)`:
+
+| Query | entity | attribute | temporal_intent |
+| :--- | :--- | :--- | :--- |
+| "What city do I live in?" | user | residence | CURRENT |
+| "Where did I live before?" | user | residence | HISTORICAL |
+| "Where am I planning to move?" | user | residence | FUTURE |
+
+### Effective Temporal State
+A memory with a `superseded_by` lineage link is **HISTORICAL**, whatever its
+text says. Lineage for all candidates is loaded in one query.
+
+### Conflict Resolution
+Facts compete per domain key: `(entity, attribute)` for single-valued
+attributes, `(entity, attribute, value)` for multi-valued ones. Winners are
+chosen by an explicit temporal priority:
+
+| Query intent | Priority |
+| :--- | :--- |
+| CURRENT | CURRENT > UNKNOWN > HISTORICAL > FUTURE |
+| FUTURE | FUTURE > CURRENT > UNKNOWN > HISTORICAL |
+| HISTORICAL | every version is kept |
+
+Ties are broken by contradiction lineage, then recency (`created_at`, then id).
+A plan can never answer a current question.
+
+### Temporal Alignment
+Candidates whose effective temporal state matches the query intent receive
+`TEMPORAL_ALIGNMENT_BONUS` (0.25), so historical facts rank first for
+historical queries.
+
+### Structured Evidence
+`ContextPackage` keeps its text buckets and adds:
+- `intent`: the `QueryIntent`.
+- `evidence`: one `ContextEvidence` per selected memory, in rank order, with
+  `memory_id`, `entity`/`attribute`/`value`, `temporal_state`,
+  `lifecycle_state`, `confidence`, `score` and machine-readable `reasons`.
+
+### Configuration
+`CONTEXT_RETRIEVAL_LIMIT` (default 10) and `CONTEXT_TOKEN_BUDGET` (default 1200
+characters) come from `app/config.py`.

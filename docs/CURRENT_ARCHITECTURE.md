@@ -103,3 +103,16 @@ A historical fact (`temporal_state = "HISTORICAL"`) remains in an `active` `Memo
 - **`SUPERSESSION != CONTRADICTION`**:
   - **`SUPERSESSION`**: Occurs when a fact transitions over time (e.g. `"I lived in Mumbai."` followed by `"I moved to Pune."`). The old fact (`Mumbai`) becomes `HISTORICAL` while remaining stored as `state = "active"` with `is_contradicted = False`. Lineage is linked via `MemoryRelationship` (`relationship_type = "superseded_by"`).
   - **`CONTRADICTION`**: Occurs when conflicting current assertions are made without transition evidence (e.g. `"I live in Mumbai."` followed by `"I live in Pune."`). The old conflicting memory is archived (`state = "archived"`, `is_contradicted = True`, `contradicted_by_id = new_memory_id`).
+
+---
+
+## v0.9 Notes
+
+- **Attribute cardinality:** only single-valued attributes (residence,
+  employer, name, …) can be contradicted or superseded. Multi-valued ones
+  (preferences, devices, tools) coexist. See `CURRENT_MEMORY_EVOLUTION.md`.
+- **Temporal cues** live in `app/knowledge/temporal_cues.py` and match whole
+  words only.
+- **Configuration:** `app/config.py` (`DATABASE_URL`, `EMBEDDING_MODEL`,
+  `CONTEXT_RETRIEVAL_LIMIT`, `CONTEXT_TOKEN_BUDGET`).
+- **Audit and gap analysis:** `ARCHITECTURE_ASSESSMENT.md`. **Measurement:** `EVALUATION.md`.

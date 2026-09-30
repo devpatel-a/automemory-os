@@ -51,3 +51,18 @@ python -m pytest -q
 7. **Context Engine & Shared Graph Consistency**:
    - Temporal query intent preference (`CURRENT` queries prefer current facts; `HISTORICAL` queries prefer historical facts).
    - Process-shared thread-safe Knowledge Graph synchronization across independent service instances.
+
+---
+
+## v0.9 Results
+- **Collected**: 149 tests (116 v0.8 baseline + 33 new).
+- **Passed**: 149. **Failed**: 0.
+- All 116 v0.8 tests are unchanged and pass.
+
+New suites:
+- `app/knowledge/test_temporal_cues.py`: word-boundary cue matching.
+- `app/knowledge/test_fact_semantics.py`: value selection, cardinality, plans, multi-message evolution.
+- `app/test_lifecycle_safety.py`: decay, re-assertion, self-contradiction.
+- `app/context/test_query_aware_context.py`: query intent, lineage, structured evidence.
+- `app/evaluation/test_benchmark.py`: metric unit tests and the benchmark regression gate (see `EVALUATION.md`).
+- `app/test_config.py`: typed settings.
