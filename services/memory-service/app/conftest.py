@@ -1,8 +1,10 @@
 """
 Session-wide test safety.
 
-The suite deletes rows, so it refuses to run unless DATABASE_URL names a
-dedicated test database (see app/testing_support.py). Enforced in two places:
+The suite deletes rows, so it refuses to run unless DATABASE_URL names an
+explicitly named (<name>_test) AND explicitly approved
+(AUTOMEMORY_TEST_DATABASE=<name>) test database (see app/testing_support.py).
+Enforced here and inside the destructive helpers themselves:
 - services/memory-service/conftest.py: pytest_sessionstart (before collection
   when pytest runs from services/memory-service);
 - the autouse session fixture below, which applies whenever any test in app/
