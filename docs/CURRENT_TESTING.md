@@ -9,14 +9,16 @@ The AutoMemory OS test suite validates system correctness across unit, integrati
 cd services/memory-service
 createdb automemory_os_test
 export DATABASE_URL=postgresql://USER@HOST/automemory_os_test
+export AUTOMEMORY_TEST_DATABASE=automemory_os_test
 python -m pytest -q
 ```
 
 > The suite deletes data, so it **refuses to run** (exit code 4) unless the
-> database named by `DATABASE_URL` contains `test` in its name
-> (`app/testing_support.py`, `conftest.py`). The destructive helper
-> `reset_database()` also checks this itself. The session migrates the test
-> database with `alembic upgrade head`.
+> database is named `<name>_test` (regex `^[a-z0-9_]+_test$`) **and**
+> `AUTOMEMORY_TEST_DATABASE` equals that name (`app/testing_support.py`,
+> `conftest.py`). A name that merely contains "test" is rejected. The
+> destructive helpers (`reset_database()`, `prepare_test_schema()`) check this
+> themselves. The session migrates the test database with `alembic upgrade head`.
 
 ### Final Verified Results (v0.8 Milestone)
 - **Collected**: 116 tests
@@ -95,3 +97,12 @@ New suites:
 - `app/graph/test_persistent_graph.py`: restart (new process), shared across services, entity safety, aliases, rollback, concurrency.
 - `app/understanding/test_generic_entities.py`: unseen entities, no curated list.
 - `app/test_admin_reads.py`, `app/provenance/test_provenance.py`, `app/knowledge/test_temporal_matrix.py`, `app/test_parse_cache.py`.
+
+---
+
+## v0.10.1 Results (pre-merge hardening)
+- **Collected**: 285 tests. **Passed**: 285. **Failed**: 0. **Skipped**: 0 (two consecutive full runs).
+- New: `app/pipeline/test_stale_target.py` (stale classification, bounded retry,
+  phantom conflicting inserts, reflection lost update), `app/test_admin_mutations.py`
+  (PUT), `app/test_delete_semantics.py` (archive vs. purge, FK integrity),
+  stronger `app/test_database_safety.py`, 0005 checks in `app/test_migrations.py`.

@@ -103,3 +103,24 @@ Deterministic, machine-readable (`same_entity`, `same_attribute`, `different_val
 `conflicting_current_claims`, `negation_detected`, `exact_content_match`,
 `equivalent_fact`, `fulfilled_plan:<id>`, ...), returned by the pipeline, stored in
 evidence and exposed by `/pipeline/process` and `GET /memory/{id}/evidence`.
+
+---
+
+## v0.10.1: Stale-Classification Protection
+
+- **Fact-domain serialization:** the pipeline takes a transaction-scoped advisory
+  lock on `(entity, attribute)` before classifying, so two statements about the
+  same domain are classified and written one after the other (previously two
+  conflicting residences could both be stored as NEW).
+- **Optimistic version:** `memories.version` is bumped by every semantic mutation
+  (contradiction, supersession, merge, reactivation, fulfilled-plan link, archive,
+  admin edit). After `SELECT ... FOR UPDATE`, each target's version must equal the
+  version seen at classification, the target must still be live and not
+  historical; otherwise the evolution rolls back and is reclassified from fresh
+  state (at most 3 attempts; deadlock/serialization failures are retried the same
+  way). Counter-only changes (reinforcement, reflection) do not bump the version.
+- **Counters:** reflection uses atomic in-database increments; opt-in
+  `record_access` listing locks rows.
+- **Admin mutations:** `PUT` (correction) and `DELETE` (archive / explicit purge)
+  are administrative operations with the same locking, version and provenance
+  guarantees; see `services/memory-service/README.md`.

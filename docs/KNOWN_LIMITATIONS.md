@@ -64,3 +64,14 @@ AutoMemory OS intentionally relies on deterministic NLP algorithms, explicit dep
   `context_service` (ILIKE over the whole query) rather than the ContextEngine;
   kept for API compatibility.
 - **Lifecycle quirk:** reinforcement with `access_count < 3` sets `weak` (still retrievable).
+- **Archived-by-request memories** stay in the historical/audit retrieval scope
+  (`include_archived=True`); use `?purge=true` to remove a memory entirely.
+- **Purge side effects are intentional and recorded, not prevented:** purging a
+  superseding memory makes the memory it superseded current again; purging a
+  contradicting memory leaves the contradicted claim archived with
+  `contradicted_by_id = NULL`. Each affected memory gets a
+  `lineage_removed_by_purge` evidence row.
+- **Admin edits (`PUT`) bypass classification by design:** an edit that changes a
+  memory into a claim conflicting with another memory does not contradict it.
+- **Per-domain serialization** means concurrent statements about the same
+  `(entity, attribute)` are processed one at a time.
