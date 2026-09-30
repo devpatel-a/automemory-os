@@ -170,9 +170,15 @@ def _prefers(new_c: ContextCandidate, old_c: ContextCandidate, intent: str) -> b
     if getattr(old_mem, "contradicted_by_id", None) == getattr(new_mem, "id", None):
         return True
 
-    # Otherwise the most recently stated fact wins
+    # Otherwise the most recently stated fact wins. Rows written in one
+    # transaction share created_at (Postgres now()), so fall back to the
+    # monotonic id to keep "most recent" deterministic.
     new_created = getattr(new_mem, "created_at", None)
     old_created = getattr(old_mem, "created_at", None)
-    if new_created and old_created:
+    if new_created and old_created and new_created != old_created:
         return new_created > old_created
+    new_id = getattr(new_mem, "id", None)
+    old_id = getattr(old_mem, "id", None)
+    if new_id is not None and old_id is not None:
+        return new_id > old_id
     return False
