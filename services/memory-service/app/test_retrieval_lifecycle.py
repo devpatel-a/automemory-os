@@ -3,6 +3,8 @@ Lifecycle-aware retrieval: filtering is enforced at the retrieval source,
 and historical/future semantics are preserved on top of it.
 """
 
+from sqlalchemy import text
+
 from app.database import SessionLocal
 from app.models import Memory
 from app.pipeline.memory_pipeline import MemoryPipeline
@@ -97,4 +99,22 @@ def test_evolution_candidates_exclude_archived_memories():
         candidates = semantic_search(db, "I live in Chennai.", limit=5)
         assert archived.id not in ids(candidates)
     finally:
+        db.close()
+
+
+def test_memories_without_embeddings_stay_reachable_with_index_scans_preferred():
+    """Regression: an HNSW index (briefly added) skips NULL embeddings, so when the
+    planner used it, embedding-less memories vanished from semantic search."""
+    reset_database()
+    db = SessionLocal()
+    try:
+        db.add(Memory(content="I am vegetarian.", category="habit", state="active"))
+        for i in range(30):
+            add(db, f"Unrelated statement number {i}.")
+        db.commit()
+        db.execute(text("SET LOCAL enable_seqscan = off"))
+        contents = [m.content for m, _ in semantic_search(db, "eating habits", limit=100)]
+        assert "I am vegetarian." in contents
+    finally:
+        db.rollback()
         db.close()

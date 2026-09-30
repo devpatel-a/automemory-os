@@ -75,7 +75,7 @@ def test_fresh_database_upgrade_matches_models(scratch_engine):
         indexes = {row[0] for row in conn.execute(text(
             "SELECT indexname FROM pg_indexes WHERE tablename = 'memories'"
         ))}
-    assert {"ix_memories_content_fts", "ix_memories_embedding_hnsw", "ix_memories_state"} <= indexes
+    assert {"ix_memories_content_fts", "ix_memories_state"} <= indexes
 
 
 def test_downgrade_and_upgrade_round_trip(scratch_engine):

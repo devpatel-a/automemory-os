@@ -116,14 +116,13 @@ def upgrade() -> None:
         "CREATE INDEX ix_memories_content_fts ON memories "
         "USING gin (to_tsvector('english', content))"
     )
-    op.execute(
-        "CREATE INDEX ix_memories_embedding_hnsw ON memories "
-        "USING hnsw (embedding vector_cosine_ops)"
-    )
+    # No ANN (HNSW/IVFFlat) index yet: HNSW does not index NULL embeddings and
+    # post-filters lifecycle predicates, which silently drops candidates.
+    # Exact scans are correct at current scale; add an ANN index when measured
+    # data volume requires it (see docs/KNOWN_LIMITATIONS.md).
 
 
 def downgrade() -> None:
-    op.drop_index("ix_memories_embedding_hnsw", table_name="memories")
     op.drop_index("ix_memories_content_fts", table_name="memories")
     op.drop_index("ix_memories_contradicted_by_id", table_name="memories")
     op.drop_index("ix_memories_state", table_name="memories")

@@ -89,11 +89,4 @@ class Memory(Base):
             sa_func.to_tsvector(literal_column("'english'"), literal_column("content")),
             postgresql_using="gin",
         ),
-        # Approximate nearest-neighbour search on cosine distance
-        Index(
-            "ix_memories_embedding_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
     )
