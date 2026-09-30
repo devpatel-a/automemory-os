@@ -1,3 +1,4 @@
+from app.config import settings
 from app.retrieval_service import retrieve_memories
 from app.context.models import ContextCandidate
 from app.context.query_entities import extract_query_entities
@@ -43,7 +44,7 @@ class ContextEngine:
         results = retrieve_memories(
             db=db,
             query=query,
-            limit=10,
+            limit=settings.context_retrieval_limit,
             include_archived=historical,
         )
 
@@ -91,13 +92,13 @@ class ContextEngine:
         # 7. Near-Duplicate Diversity Optimization
         diversified = diversify_candidates(
             ranked,
-            limit=10,
+            limit=settings.context_retrieval_limit,
         )
 
         # 8. Token Budget Optimization
         optimized = optimize_token_budget(
             diversified,
-            max_characters=1200,
+            max_characters=settings.context_token_budget,
         )
 
         # 9. Context Assembly
