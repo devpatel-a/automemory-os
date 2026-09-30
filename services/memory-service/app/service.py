@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import desc
+from sqlalchemy import desc, exists, func, select
 from sqlalchemy.orm import Session
 
+from . import lineage
 from .database import SessionLocal
+from .lineage import HISTORICAL_LINEAGE_TYPES
 from .models import Memory
 from .models_relationship import MemoryRelationship
 
@@ -17,6 +19,27 @@ from .duplicate_service import (
     find_duplicate,
     strengthen_memory,
 )
+
+
+def _persist(db: Session, obj, commit: bool):
+    """Commit + refresh (standalone use) or flush only (inside a caller-owned transaction)."""
+    if commit:
+        db.commit()
+        db.refresh(obj)
+    else:
+        db.flush()
+    return obj
+
+
+def lock_memory(db: Session, memory: Memory) -> Memory:
+    """Re-read a memory with a row lock (SELECT ... FOR UPDATE) for the current transaction."""
+    return (
+        db.query(Memory)
+        .filter(Memory.id == memory.id)
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
 
 
 def get_memory_object(item):
@@ -70,18 +93,41 @@ def create_memory(
     content: str,
     category: str,
     db: Session | None = None,
+    embedding: list[float] | None = None,
+    semantic_dedupe: bool = True,
+    commit: bool = True,
 ):
     """
     Store or reinforce a memory with optional database session reuse.
+
+    - embedding: precomputed embedding for content (avoids re-embedding).
+    - semantic_dedupe=False: never fold the statement into a *different*
+      semantically similar memory (required when the statement is a competing
+      claim, e.g. the new side of a contradiction).
+    - commit=False: flush only; the caller owns the transaction.
     """
     db_session = db if db is not None else SessionLocal()
 
     try:
-        # Prefer a live (non-archived) exact match.
+        # Serialize concurrent writers of the same statement (released at
+        # transaction end), so two simultaneous inserts of identical content
+        # cannot both miss the exact-match check.
+        db_session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(content)))
+        )
+
+        # Prefer a live (non-archived) exact match. Memories with historical
+        # lineage (superseded / fulfilled) describe the past: a new statement
+        # with the same text is a new current assertion, not a reinforcement.
+        historical_link = exists().where(
+            MemoryRelationship.source_memory_id == Memory.id,
+            MemoryRelationship.relationship_type.in_(HISTORICAL_LINEAGE_TYPES),
+        )
         existing = (
             db_session.query(Memory)
             .filter(
-                Memory.content == content
+                Memory.content == content,
+                ~historical_link,
             )
             .order_by((Memory.state == "archived").asc(), Memory.id.asc())
             .first()
@@ -108,17 +154,17 @@ def create_memory(
             existing.last_accessed = datetime.now(UTC)
             update_memory_state(existing)
             decay_memory(existing)
-            db_session.commit()
-            db_session.refresh(existing)
-            return existing
+            return _persist(db_session, existing, commit)
 
-        embedding = generate_embedding(content)
+        if embedding is None:
+            embedding = generate_embedding(content)
 
         candidates = semantic_search(
             db=db_session,
             query=content,
             limit=5,
-        )
+            query_embedding=embedding,
+        ) if semantic_dedupe else []
 
         # semantic_search returns live memories only: archived (merged or
         # contradicted) memories must not absorb new evidence.
@@ -129,9 +175,7 @@ def create_memory(
             strengthen_memory(duplicate)
             update_memory_state(duplicate)
             decay_memory(duplicate)
-            db_session.commit()
-            db_session.refresh(duplicate)
-            return duplicate
+            return _persist(db_session, duplicate, commit)
 
         memory = Memory(
             content=content,
@@ -142,9 +186,7 @@ def create_memory(
         )
 
         db_session.add(memory)
-        db_session.commit()
-        db_session.refresh(memory)
-        return memory
+        return _persist(db_session, memory, commit)
 
     finally:
         if db is None:
@@ -252,32 +294,36 @@ def delete_memory(
             db_session.close()
 
 
-def reinforce_existing_memory(db: Session, memory: Memory):
+def reinforce_existing_memory(db: Session, memory: Memory, commit: bool = True):
     memory.importance = min(memory.importance + 0.05, 1.0)
     memory.access_count += 1
     memory.confidence = min(memory.confidence + 0.10, 1.0)
     memory.last_accessed = datetime.now(UTC)
     update_memory_state(memory)
     decay_memory(memory)
-    db.commit()
-    db.refresh(memory)
-    return memory
+    return _persist(db, memory, commit)
 
 
-def contradict_existing_memory(db: Session, existing_memory: Memory, new_memory_id: int):
+def contradict_existing_memory(
+    db: Session,
+    existing_memory: Memory,
+    new_memory_id: int,
+    commit: bool = True,
+):
+    if existing_memory.id == new_memory_id:
+        raise ValueError(f"memory {new_memory_id} cannot contradict itself")
     existing_memory.is_contradicted = True
     existing_memory.contradicted_by_id = new_memory_id
     existing_memory.confidence = max(existing_memory.confidence - 0.20, 0.0)
     existing_memory.state = "archived"
-    db.commit()
-    db.refresh(existing_memory)
-    return existing_memory
+    return _persist(db, existing_memory, commit)
 
 
 def supersede_existing_fact_memory(
     db: Session,
     existing_memory: Memory,
     new_memory_id: int,
+    commit: bool = True,
 ) -> Memory:
     """
     Mark an existing memory as superseded by a newer fact (SUPERSESSION workflow).
@@ -288,28 +334,12 @@ def supersede_existing_fact_memory(
     existing_memory.is_contradicted = False
     existing_memory.contradicted_by_id = None
     existing_memory.state = "active"
+    db.flush()
 
-    # Link lineage via existing MemoryRelationship table
-    existing_rel = (
-        db.query(MemoryRelationship)
-        .filter(
-            MemoryRelationship.source_memory_id == existing_memory.id,
-            MemoryRelationship.target_memory_id == new_memory_id,
-            MemoryRelationship.relationship_type == "superseded_by",
-        )
-        .first()
-    )
-    if not existing_rel:
-        rel = MemoryRelationship(
-            source_memory_id=existing_memory.id,
-            target_memory_id=new_memory_id,
-            relationship_type="superseded_by",
-        )
-        db.add(rel)
+    # Idempotent lineage link (unique constraint + ON CONFLICT DO NOTHING)
+    lineage.link(db, existing_memory.id, new_memory_id, lineage.SUPERSEDED_BY)
 
-    db.commit()
-    db.refresh(existing_memory)
-    return existing_memory
+    return _persist(db, existing_memory, commit)
 
 
 def update_existing_fact_memory(
@@ -317,6 +347,7 @@ def update_existing_fact_memory(
     existing_memory: Memory,
     new_content: str,
     category: str | None = None,
+    commit: bool = True,
 ) -> Memory:
     """
     Update an existing memory in place when a new memory updates an existing fact (UPDATE workflow).
@@ -332,9 +363,7 @@ def update_existing_fact_memory(
     existing_memory.contradicted_by_id = None
     existing_memory.confidence = min(existing_memory.confidence + 0.05, 1.0)
     update_memory_state(existing_memory)
-    db.commit()
-    db.refresh(existing_memory)
-    return existing_memory
+    return _persist(db, existing_memory, commit)
 
 
 def merge_existing_memories(
@@ -342,7 +371,17 @@ def merge_existing_memories(
     existing_memories: list,
     merged_content: str,
     category: str,
+    commit: bool = True,
+    embedding: list[float] | None = None,
 ) -> Memory:
+    """
+    Consolidate equivalent memories into one canonical memory.
+
+    Lineage is preserved: every archived duplicate gets a 'merged_into' link
+    to the canonical memory, relationships are transferred, the earliest
+    created_at is kept, and the original statements remain recoverable from
+    the duplicates and from the evidence records (app/provenance).
+    """
     cleaned_mems = []
     for item in existing_memories:
         m = get_memory_object(item)
@@ -350,7 +389,10 @@ def merge_existing_memories(
             cleaned_mems.append(m)
 
     if not cleaned_mems:
-        return create_memory(content=merged_content, category=category, db=db)
+        return create_memory(
+            content=merged_content, category=category, db=db,
+            embedding=embedding, commit=commit,
+        )
 
     canonical = cleaned_mems[0]
 
@@ -372,7 +414,7 @@ def merge_existing_memories(
 
     canonical.content = merged_content
     canonical.category = category
-    canonical.embedding = generate_embedding(merged_content)
+    canonical.embedding = embedding if embedding is not None else generate_embedding(merged_content)
     canonical.confidence = min(preserved_conf + 0.05, 1.0)
     canonical.access_count = total_access
     canonical.created_at = earliest_created
@@ -393,12 +435,14 @@ def merge_existing_memories(
             (r.source_memory_id, r.target_memory_id, r.relationship_type)
         )
 
+    merged_ids = []
     for other_mem in cleaned_mems[1:]:
         if other_mem.id == canonical_id:
             continue
         other_mem.state = "archived"
         other_mem.is_contradicted = False
         other_mem.contradicted_by_id = None
+        merged_ids.append(other_mem.id)
 
         other_rels = db.query(MemoryRelationship).filter(
             (MemoryRelationship.source_memory_id == other_mem.id)
@@ -429,6 +473,8 @@ def merge_existing_memories(
                 rel.target_memory_id = new_tgt
                 existing_rel_pairs.add(pair_key)
 
-    db.commit()
-    db.refresh(canonical)
-    return canonical
+    db.flush()
+    for merged_id in merged_ids:
+        lineage.link(db, merged_id, canonical_id, lineage.MERGED_INTO)
+
+    return _persist(db, canonical, commit)
