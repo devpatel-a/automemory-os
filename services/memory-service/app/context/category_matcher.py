@@ -1,3 +1,5 @@
+from app.knowledge.temporal_cues import contains_cue
+
 CATEGORY_MATCH_WEIGHT = 0.15
 
 
@@ -47,14 +49,10 @@ def category_match_score(
     matches the user's query.
     """
 
-    query = query.lower()
+    keywords = CATEGORY_KEYWORDS.get(category, [])
 
-    for keyword in CATEGORY_KEYWORDS.get(
-        category,
-        [],
-    ):
-
-        if keyword in query:
-            return CATEGORY_MATCH_WEIGHT
+    # Whole-word cues ("like" must not match "likely"); inflections are listed.
+    if keywords and contains_cue(query, keywords + [k + "s" for k in keywords]):
+        return CATEGORY_MATCH_WEIGHT
 
     return 0.0

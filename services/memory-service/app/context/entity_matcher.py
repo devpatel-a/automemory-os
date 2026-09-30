@@ -1,3 +1,4 @@
+from app.knowledge.temporal_cues import contains_cue
 from app.understanding.models import Entity
 
 
@@ -16,13 +17,12 @@ def entity_match_score(
     if not query_entities:
         return 0.0
 
-    content = memory_content.lower()
-
     matches = 0
 
     for entity in query_entities:
 
-        if entity.text.lower() in content:
+        # Whole-word/phrase match: entity "car" must not match "career".
+        if entity.text.strip() and contains_cue(memory_content, [entity.text.lower()]):
             matches += 1
 
     return matches * ENTITY_MATCH_WEIGHT

@@ -11,7 +11,8 @@ ACCESS_WEIGHT = 0.04
 CATEGORY_WEIGHT = 0.05
 CONTRADICTION_PENALTY = 0.80
 
-STOP_WORDS = {"the", "is", "a", "an", "and", "or", "in", "on", "at", "to", "for", "of", "with", "my", "i", "me", "do", "you", "what", "where", "how"}
+from app.knowledge.temporal_cues import contains_cue
+from app.lexical import STOP_WORDS, lexical_score  # noqa: F401  (STOP_WORDS re-exported)
 
 
 def normalize_similarity(distance: float | None) -> float:
@@ -23,35 +24,10 @@ def normalize_similarity(distance: float | None) -> float:
 
 def calculate_keyword_score(content: str, query: str) -> float:
     """
-    Calculate normalized keyword relevance score [0, 1].
+    Calculate normalized keyword relevance score [0, 1] on whole words.
     Distinguishes exact/multi-term matches from weak single-word overlap.
     """
-    c_lower = content.lower().strip()
-    q_lower = query.lower().strip()
-
-    if not c_lower or not q_lower:
-        return 0.0
-
-    # Exact full query match
-    if q_lower in c_lower:
-        return 1.0
-
-    # Filter out stop words
-    words = [w for w in q_lower.split() if w not in STOP_WORDS and len(w) > 1]
-    if not words:
-        words = [w for w in q_lower.split() if len(w) > 1]
-
-    if not words:
-        return 0.0
-
-    matched = sum(1 for w in words if w in c_lower)
-    match_ratio = matched / float(len(words))
-
-    # Single word overlap in multi-word query is weak match
-    if len(words) > 1 and matched == 1:
-        return 0.15 * match_ratio
-
-    return match_ratio
+    return lexical_score(content, query)
 
 
 def calculate_recency_score(last_accessed: datetime | None, created_at: datetime | None) -> float:
@@ -82,13 +58,13 @@ def infer_query_category(query: str) -> str | None:
     """Infer intended memory category from query keywords."""
     q = query.lower()
     # Linguistic cues only (no domain values such as drinks or foods).
-    if any(k in q for k in ["preference", "prefer", "like", "favorite", "enjoy", "love"]):
+    if contains_cue(q, ["preference", "preferences", "prefer", "prefers", "like", "likes", "favorite", "favorites", "enjoy", "enjoys", "love", "loves"]):
         return "preference"
-    if any(k in q for k in ["where", "live", "work", "name", "age", "profile", "born", "residence", "home"]):
+    if contains_cue(q, ["where", "live", "lives", "work", "works", "name", "age", "profile", "born", "residence", "home"]):
         return "profile"
-    if any(k in q for k in ["happened", "recently", "event", "visited", "yesterday", "last", "went"]):
+    if contains_cue(q, ["happened", "recently", "event", "events", "visited", "yesterday", "last", "went"]):
         return "event"
-    if any(k in q for k in ["habit", "daily", "usually", "every", "always", "routine"]):
+    if contains_cue(q, ["habit", "habits", "daily", "usually", "every", "always", "routine", "routines"]):
         return "habit"
     return None
 

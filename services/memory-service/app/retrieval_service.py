@@ -1,7 +1,12 @@
 from app.semantic.semantic_service import generate_embedding, semantic_search
-from app.ranking_service import compute_hybrid_rank_score, STOP_WORDS
+from app.ranking_service import compute_hybrid_rank_score
+from app.lexical import fts_match_any, query_terms
 from app.graph.sql_repository import SqlGraphRepository
 from app.models import Memory
+
+# Bounded candidate pools per retrieval signal
+SEMANTIC_CANDIDATE_LIMIT = 20
+LEXICAL_CANDIDATE_LIMIT = 30
 
 
 def retrieve_memories(
@@ -30,7 +35,7 @@ def retrieve_memories(
     semantic_results = semantic_search(
         db=db,
         query=query,
-        limit=20,
+        limit=SEMANTIC_CANDIDATE_LIMIT,
         query_embedding=query_emb,
         include_archived=include_archived,
     )
@@ -43,36 +48,18 @@ def retrieve_memories(
             "graph_connected": False,
         }
 
-    # 2. Keyword Search
-    words = [
-        w.strip(".,!?\"'").lower()
-        for w in query.split()
-        if w.strip(".,!?\"'").lower() not in STOP_WORDS
-        and len(w.strip(".,!?\"'")) > 1
-    ]
-    if not words:
-        words = [
-            w.strip(".,!?\"'").lower()
-            for w in query.split()
-            if len(w.strip(".,!?\"'")) > 1
-        ]
-
+    # 2. Lexical Search (PostgreSQL full-text search on whole words:
+    #    "car" matches "cars", never "career" / "scary" / "carpool")
+    terms = query_terms(query)
     keyword_mids = set()
-    if words:
-        for word in words[:3]:
-            q = db.query(Memory.id)
-            if not include_archived:
-                q = q.filter(Memory.state != "archived")
-            kw_mems = (
-                q.filter(Memory.content.ilike(f"%{word}%"))
-                .limit(10)
-                .all()
-            )
-            for row in kw_mems:
-                mid = row[0]
-                keyword_mids.add(mid)
-                if mid in candidate_map:
-                    candidate_map[mid]["keyword_matched"] = True
+    if terms:
+        q = db.query(Memory.id).filter(fts_match_any(Memory.content, terms))
+        if not include_archived:
+            q = q.filter(Memory.state != "archived")
+        for (mid,) in q.limit(LEXICAL_CANDIDATE_LIMIT).all():
+            keyword_mids.add(mid)
+            if mid in candidate_map:
+                candidate_map[mid]["keyword_matched"] = True
 
     # 3. Knowledge Graph Expansion (persistent graph, conservative entity resolution:
     #    exact normalized names / explicit aliases, longest span first)
