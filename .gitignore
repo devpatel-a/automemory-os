@@ -31,3 +31,7 @@ build/
 # Coverage
 .coverage
 htmlcov/
+# Generated snapshots / local database dumps (never canonical source or schema)
+*.zip
+*_backup.sql
+*.dump
