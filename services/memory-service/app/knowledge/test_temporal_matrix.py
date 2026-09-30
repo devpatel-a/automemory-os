@@ -111,9 +111,11 @@ def test_future_completion_links_plan_and_never_merges_it(db):
     assert answer(db, "Where do I live?")[0] == ("I moved to Bangalore.", "CURRENT")
     future = answer(db, "Where will I move?")
     assert ("I planned to move to Bangalore.", "FUTURE") not in future
-    history = dict(answer(db, "Where did I live before?"))
-    assert history["I planned to move to Bangalore."] == "HISTORICAL"
-    assert history["I live in Pune."] == "HISTORICAL"
+    history = answer(db, "Where did I live before?")
+    # Past states rank first; the fulfilled plan is not a past residence (it may
+    # be dropped as a near-duplicate of its completion), and is never FUTURE.
+    assert history[0] == ("I live in Pune.", "HISTORICAL")
+    assert dict(history).get("I planned to move to Bangalore.", "HISTORICAL") == "HISTORICAL"
 
 
 def test_future_completion_without_prior_residence(db):

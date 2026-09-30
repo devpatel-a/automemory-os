@@ -90,7 +90,11 @@ class ContextEngine:
 
         # 5b. Temporal intent alignment
         for c in resolved_candidates:
-            if c.temporal_state and c.temporal_state == intent.temporal_intent:
+            if is_completed_plan(c):
+                # A fulfilled plan is history *as a plan*: it never answers a
+                # future question, but its value was never a past state either.
+                c.explanation.append("temporal_alignment: skipped (fulfilled plan)")
+            elif c.temporal_state and c.temporal_state == intent.temporal_intent:
                 c.evidence_score += TEMPORAL_ALIGNMENT_BONUS
                 c.score = c.evidence_score
                 c.explanation.append(
@@ -123,6 +127,15 @@ class ContextEngine:
             candidates=optimized,
             intent=intent,
         )
+
+
+def is_completed_plan(candidate) -> bool:
+    """A stored FUTURE fact whose effective state became HISTORICAL through lineage."""
+    return (
+        candidate.fact is not None
+        and candidate.fact.temporal_state == "FUTURE"
+        and candidate.temporal_state == "HISTORICAL"
+    )
 
 
 def load_superseded_ids(db, memory_ids: list[int]) -> set[int]:

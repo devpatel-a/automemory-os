@@ -80,6 +80,20 @@ SCENARIOS: tuple[Scenario, ...] = (
         ),
     ),
     Scenario(
+        name="plan_fulfilment",
+        statements=(
+            ("I live in Pune.", "profile"),
+            ("I planned to move to Bangalore.", "profile"),
+            ("I moved to Bangalore.", "profile"),
+        ),
+        queries=(
+            QueryCase("Where do I live?", ("I moved to Bangalore.",),
+                      forbidden=("I planned to move to Bangalore.", "I live in Pune.")),
+            QueryCase("Where did I live before?", ("I live in Pune.",)),
+        ),
+        superseded=(("I live in Pune.", "I moved to Bangalore."),),
+    ),
+    Scenario(
         name="residence_contradiction",
         statements=(
             ("I live in Mumbai.", "profile"),
