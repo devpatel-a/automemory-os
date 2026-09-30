@@ -34,6 +34,7 @@ def retrieve_memories(
         query=query,
         limit=20,
         query_embedding=query_emb,
+        include_archived=include_archived,
     )
 
     for memory, distance in semantic_results:

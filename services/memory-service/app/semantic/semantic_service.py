@@ -39,10 +39,17 @@ def semantic_search(
     query: str,
     limit: int = 20,
     query_embedding: list[float] | None = None,
+    include_archived: bool = False,
 ):
     """
     Perform semantic similarity search using pgvector.
     Allows passing a precomputed query_embedding to eliminate duplicate model calls.
+
+    Lifecycle semantics (explicit, enforced at the source):
+    - default: live memories only ('active' and 'weak'). Superseded historical
+      memories stay 'active', so they remain available to historical queries.
+    - include_archived=True: also archived memories (merged duplicates and
+      contradicted claims) — for historical/audit/admin use.
 
     Returns:
         List[(Memory, distance)]
@@ -53,14 +60,11 @@ def semantic_search(
         else generate_embedding(query)
     )
 
-    results = (
-        db.query(
-            Memory,
-            Memory.embedding.cosine_distance(embedding).label("distance"),
-        )
-        .order_by(Memory.embedding.cosine_distance(embedding))
-        .limit(limit)
-        .all()
-    )
+    distance = Memory.embedding.cosine_distance(embedding)
+    # Memories without an embedding are kept (distance NULL sorts last) so
+    # they stay reachable, as before.
+    q = db.query(Memory, distance.label("distance"))
+    if not include_archived:
+        q = q.filter(Memory.state != "archived")
 
-    return results
+    return q.order_by(distance).limit(limit).all()

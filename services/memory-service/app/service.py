@@ -120,11 +120,8 @@ def create_memory(
             limit=5,
         )
 
-        # Archived memories (merged or contradicted) must not absorb new evidence.
-        candidates = [
-            (m, d) for m, d in candidates
-            if getattr(m, "state", None) != "archived"
-        ]
+        # semantic_search returns live memories only: archived (merged or
+        # contradicted) memories must not absorb new evidence.
 
         duplicate = find_duplicate(candidates)
 
