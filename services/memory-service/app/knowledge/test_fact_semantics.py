@@ -1,3 +1,4 @@
+from app.testing_support import reset_database
 """
 Fact semantics regressions: value selection, attribute cardinality, planned
 (FUTURE) facts and multi-message evolution safety.
@@ -18,11 +19,7 @@ from app.knowledge.knowledge_types import KnowledgeDecision
 
 
 def clear_db():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
-    reset_shared_graph()
+    reset_database()
 
 
 def fact_of(text_: str):
