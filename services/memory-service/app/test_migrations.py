@@ -17,7 +17,7 @@ from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, text
 
 from app.database import Base, engine as app_engine
-from app.testing_support import assert_test_database, run_migrations
+from app.testing_support import assert_scratch_test_database_name, run_migrations
 import app.models  # noqa: F401
 import app.models_relationship  # noqa: F401
 import app.graph.db_models  # noqa: F401
@@ -27,8 +27,7 @@ import app.provenance.models  # noqa: F401
 @pytest.fixture
 def scratch_engine():
     """A brand-new empty database, dropped afterwards."""
-    name = f"automemory_migration_test_{uuid.uuid4().hex[:8]}"
-    assert_test_database(f"postgresql://x/{name}")
+    name = assert_scratch_test_database_name(f"automemory_migration_{uuid.uuid4().hex[:8]}_test")
     admin = create_engine(app_engine.url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     try:
         with admin.connect() as conn:
@@ -152,3 +151,7 @@ def test_legacy_create_all_database_upgrades_without_data_loss(scratch_engine):
             "FROM memory_evidence e JOIN memories m ON m.id = e.memory_id"
         )).all()
         assert [tuple(r) for r in legacy] == [("legacy", True, None, None, None)] * 3
+        # 0005: optimistic version starts at 1 for existing rows; no previous text invented
+        assert conn.execute(text("SELECT array_agg(DISTINCT version) FROM memories")).scalar() == [1]
+        assert conn.execute(text("SELECT count(*) FROM memory_evidence WHERE previous_text IS NOT NULL")).scalar() == 0
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0005_memory_version"

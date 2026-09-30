@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from app.models import Memory
@@ -22,14 +23,22 @@ class ReflectionEngine:
         response: str,
         memories_used: list[Memory],
     ) -> dict:
-        accessed_ids = []
 
         # 1. Update access count & recency for memories used in prompt
-        for memory in memories_used:
-            memory.access_count += 1
-            memory.last_accessed = datetime.now(UTC)
-            memory.importance = min(memory.importance + 0.02, 1.0)
-            accessed_ids.append(memory.id)
+        # Atomic in-database increments: no lost updates against concurrent
+        # reinforcement (a read-modify-write on these objects could overwrite it).
+        accessed_ids = [memory.id for memory in memories_used]
+        if accessed_ids:
+            db.execute(
+                update(Memory)
+                .where(Memory.id.in_(accessed_ids))
+                .values(
+                    access_count=Memory.access_count + 1,
+                    last_accessed=datetime.now(UTC),
+                    importance=func.least(Memory.importance + 0.02, 1.0),
+                )
+                .execution_options(synchronize_session=False)
+            )
 
         # 2. Inspect whether the generated response conflicts with the memories
         #    it used. This is reported only: generated text is not user
@@ -44,6 +53,8 @@ class ReflectionEngine:
                 conflicting_ids.append(memory.id)
 
         db.commit()
+        for memory in memories_used:
+            db.refresh(memory)
 
         return {
             "accessed_memory_ids": accessed_ids,

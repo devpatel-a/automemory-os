@@ -14,7 +14,11 @@ class MemoryCreate(BaseModel):
 
 
 class MemoryUpdate(BaseModel):
+    """Administrative correction of a memory's text (not a knowledge-evolution event)."""
+
     content: str
+    # Optimistic concurrency: reject with 409 if the memory changed since it was read.
+    expected_version: int | None = None
 
 
 class MemoryResponse(BaseModel):
@@ -26,6 +30,7 @@ class MemoryResponse(BaseModel):
     state: str
     confidence: float = 1.0
     is_contradicted: bool = False
+    version: int = 1
     created_at: datetime
     last_accessed: datetime
 

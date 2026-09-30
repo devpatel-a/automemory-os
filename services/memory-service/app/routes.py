@@ -76,16 +76,25 @@ def get_memory_evidence(
 def update_memory(
     memory_id: int,
     memory: MemoryUpdate,
+    db: Session = Depends(get_db),
 ):
+    """Administrative text correction with locking, provenance and graph rebuild."""
     return service.update_memory(
         memory_id=memory_id,
         content=memory.content,
+        db=db,
+        expected_version=memory.expected_version,
     )
 
 
 @router.delete("/memory/{memory_id}")
-def delete_memory(memory_id: int):
-    return service.delete_memory(memory_id)
+def delete_memory(
+    memory_id: int,
+    purge: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Archive (default, non-destructive) or, with purge=true, permanently delete."""
+    return service.delete_memory(memory_id, db=db, purge=purge)
 
 
 @router.get(

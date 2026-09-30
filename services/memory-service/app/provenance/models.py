@@ -38,6 +38,8 @@ class MemoryEvidence(Base):
     extractor_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Text the memory held before an administrative edit (PUT /memory/{id}).
+    previous_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     reason_codes = mapped_column(JSONB, server_default=text("'[]'::jsonb"), nullable=False)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

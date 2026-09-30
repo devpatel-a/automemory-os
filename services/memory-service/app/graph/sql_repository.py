@@ -14,7 +14,7 @@ Entity resolution priority (conservative, deterministic):
 
 import re
 
-from sqlalchemy import select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -80,6 +80,28 @@ class SqlGraphRepository:
             )
             .on_conflict_do_nothing(constraint="uq_entity_relationships_edge_memory")
         )
+
+    def unlink_memory(self, memory_id: int) -> None:
+        """Remove a memory's entity links and the relationships it supports."""
+        self.db.execute(delete(EntityRelationship).where(EntityRelationship.memory_id == memory_id))
+        self.db.execute(delete(MemoryEntity).where(MemoryEntity.memory_id == memory_id))
+
+    def delete_orphan_entities(self) -> int:
+        """
+        Delete entities no memory mentions and no relationship or explicit
+        alias references. Aliased entities are kept (aliases are explicit data).
+        """
+        result = self.db.execute(
+            delete(Entity).where(
+                ~exists().where(MemoryEntity.entity_id == Entity.id),
+                ~exists().where(EntityAlias.entity_id == Entity.id),
+                ~exists().where(
+                    (EntityRelationship.source_entity_id == Entity.id)
+                    | (EntityRelationship.target_entity_id == Entity.id)
+                ),
+            )
+        )
+        return result.rowcount
 
     # -------------------------------------------------------------- reads
 

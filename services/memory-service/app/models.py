@@ -74,6 +74,14 @@ class Memory(Base):
         default=False
     )
 
+    # Optimistic concurrency: bumped by every semantic mutation (see
+    # app/service.py bump_version). Evolution re-checks it after row locking.
+    version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default="1",
+    )
+
     __table_args__ = (
         CheckConstraint(
             "state IN ('active', 'weak', 'archived')",

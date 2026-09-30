@@ -58,6 +58,14 @@ class GraphService:
             if source_id is not None and target_id is not None:
                 self.sql.add_relationship(source_id, target_id, edge.relationship, memory_id)
 
+    def forget_memory(self, memory_id: int) -> None:
+        """Remove a memory from the process-local compatibility view."""
+        graph = self.repository.load()
+        for node in graph.nodes:
+            if memory_id in node.memory_ids:
+                node.memory_ids.remove(memory_id)
+        self.repository.save(graph)
+
     def process_memory(
         self,
         parsed_memory,

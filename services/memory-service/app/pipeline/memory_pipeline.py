@@ -3,10 +3,14 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from sqlalchemy.exc import DBAPIError
+
 from app.service import (
+    bump_version,
     calculate_importance,
     contradict_existing_memory,
     create_memory,
+    lock_fact_domains,
     lock_memory,
     merge_existing_memories,
     reinforce_existing_memory,
@@ -45,6 +49,14 @@ MAX_ATTEMPTS = 3
 
 class EvolutionConflict(RuntimeError):
     """The target memory changed concurrently; the evolution is retried from scratch."""
+
+
+# PostgreSQL deadlock_detected / serialization_failure: safe to retry from scratch.
+_RETRYABLE_SQLSTATES = {"40P01", "40001"}
+
+
+def _is_retryable_db_error(exc: DBAPIError) -> bool:
+    return getattr(getattr(exc, "orig", None), "pgcode", None) in _RETRYABLE_SQLSTATES
 
 
 def get_memory_object(item):
@@ -119,8 +131,10 @@ class MemoryPipeline:
                 )
                 self.db.commit()
                 break
-            except EvolutionConflict as conflict:
+            except (EvolutionConflict, DBAPIError) as conflict:
                 self.db.rollback()
+                if isinstance(conflict, DBAPIError) and not _is_retryable_db_error(conflict):
+                    raise
                 logger.info("evolution conflict (attempt %d/%d): %s", attempt, MAX_ATTEMPTS, conflict)
                 if attempt == MAX_ATTEMPTS:
                     raise
@@ -149,11 +163,18 @@ class MemoryPipeline:
     # ------------------------------------------------------------------ core
 
     def _evolve(self, content, category, parsed_memory, embedding, provenance=None):
+        # Serialize classification + write for statements about the same
+        # (entity, attribute): no concurrent statement can change the state
+        # this classification reasons about before it is applied.
+        lock_fact_domains(self.db, [extract_fact(parsed_memory)])
+
         self.db.expire_all()
         candidates = semantic_search(
             self.db, content, limit=CANDIDATE_LIMIT, query_embedding=embedding,
         )
         by_id = {get_memory_object(c).id: get_memory_object(c) for c in candidates}
+        # Versions the classification is based on; re-verified after row locking.
+        self._classified_versions = {mid: m.version for mid, m in by_id.items()}
         historical = historical_memory_ids(self.db, by_id.keys())
 
         knowledge = process_knowledge(parsed_memory, candidates, historical)
@@ -214,8 +235,6 @@ class MemoryPipeline:
             return evolution
 
         target = self._lock_live(target)
-        if is_memory_superseded(self.db, target.id):
-            raise EvolutionConflict(f"memory {target.id} was superseded concurrently")
 
         # New memory for the new fact; the old one is preserved (state stays
         # 'active') for historical queries and linked via 'superseded_by'.
@@ -232,14 +251,17 @@ class MemoryPipeline:
         return _Evolution(memory, ["superseded_memory:%d" % target.id])
 
     def _merge(self, content, category, parsed_memory, embedding, candidates, historical, **_):
-        merge_candidates = []
+        equivalent = []
         for item in candidates:
             cm = get_memory_object(item)
             if cm.id in historical:
                 continue
             dist = item[1] if hasattr(item, "__getitem__") and len(item) > 1 else None
             if is_merge_equivalent(parsed_memory, cm, distance=dist):
-                merge_candidates.append(self._lock_live(cm))
+                equivalent.append(cm)
+        # Lock in id order (consistent lock ordering), keep the canonical order.
+        locked = {m.id: self._lock_live(m) for m in sorted(equivalent, key=lambda m: m.id)}
+        merge_candidates = [locked[m.id] for m in equivalent]
 
         if not merge_candidates:
             evolution = self._store(content=content, category=category, embedding=embedding)
@@ -330,15 +352,29 @@ class MemoryPipeline:
                 plan_fact.value.strip().lower(),
             )
             if plan_key == key:
+                plan = self._lock_live(plan)
+                bump_version(plan)
                 lineage.link(self.db, plan.id, memory.id, lineage.FULFILLED_BY)
                 reasons.append("fulfilled_plan:%d" % plan.id)
         return reasons
 
     def _lock_live(self, memory: Memory) -> Memory:
-        """Row-lock a target and verify it is still a live evolution target."""
+        """
+        Row-lock a target (SELECT ... FOR UPDATE) and verify the classification
+        is still valid for it: same version as when classified (no concurrent
+        edit, contradiction, merge or lineage change), still live, and not
+        historical. Otherwise the whole evolution is retried from fresh state.
+        """
+        expected = self._classified_versions.get(memory.id)
         locked = lock_memory(self.db, memory)
+        if expected is not None and locked.version != expected:
+            raise EvolutionConflict(
+                f"memory {locked.id} changed after classification (version {expected} -> {locked.version})"
+            )
         if locked.state == "archived" or locked.is_contradicted:
             raise EvolutionConflict(f"memory {locked.id} was archived or contradicted concurrently")
+        if is_memory_superseded(self.db, locked.id):
+            raise EvolutionConflict(f"memory {locked.id} became historical concurrently")
         return locked
 
     def _find_conflicting_memory(self, parsed_memory, embedding, historical):
@@ -355,5 +391,6 @@ class MemoryPipeline:
             if memory.id in wide_historical:
                 continue
             if detect_contradiction(parsed_memory, memory):
+                self._classified_versions.setdefault(memory.id, memory.version)
                 return memory
         return None
