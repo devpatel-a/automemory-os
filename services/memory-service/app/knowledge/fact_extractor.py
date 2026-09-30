@@ -121,6 +121,21 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         if complement is not None:
             verb_token = complement
             is_intention = True
+    elif (
+        verb_token is not None
+        and verb_token.lemma_.lower() == "use"
+        and verb_token.tag_ == "VBD"
+        and verb_token.i + 1 < len(doc)
+        and doc[verb_token.i + 1].lower_ == "to"
+    ):
+        # Habitual-past aspect "used to <verb>": the fact is about <verb>
+        # ("I used to live in Mumbai" is residence, not tool usage).
+        complement = next(
+            (c for c in verb_token.children if c.dep_ == "xcomp" and c.pos_ in ("VERB", "AUX")),
+            None,
+        )
+        if complement is not None:
+            verb_token = complement
 
     possessive_my = any(t.lower_ in USER_PRONOUNS and t.dep_ == "poss" for t in doc)
 

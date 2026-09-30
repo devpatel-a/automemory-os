@@ -158,3 +158,10 @@ def test_transition_never_supersedes_a_future_plan():
         assert mumbai.id in {r.source_memory_id for r in rels}
     finally:
         db.close()
+
+
+def test_used_to_aspect_is_not_tool_usage():
+    """Regression: 'I used to live in Mumbai.' was extracted as attribute 'tool'."""
+    fact = fact_of("I used to live in Mumbai.")
+    assert (fact.attribute, fact.value, fact.temporal_state) == ("residence", "Mumbai", "HISTORICAL")
+    assert fact_of("I used Python to build it.").attribute == "tool"
