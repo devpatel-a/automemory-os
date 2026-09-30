@@ -48,14 +48,21 @@ def reset_database() -> None:
     reset_shared_graph()
 
 
+def run_migrations(connection=None) -> None:
+    """Apply all Alembic migrations (alembic upgrade head)."""
+    import os
+    from alembic import command
+    from alembic.config import Config
+
+    service_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config = Config(os.path.join(service_dir, "alembic.ini"))
+    config.set_main_option("script_location", os.path.join(service_dir, "alembic"))
+    if connection is not None:
+        config.attributes["connection"] = connection
+    command.upgrade(config, "head")
+
+
 def prepare_test_schema() -> None:
-    """Create the schema on the (verified) test database."""
+    """Migrate the (verified) test database to the latest schema."""
     assert_test_database()
-
-    from app.database import Base, engine
-    import app.models  # noqa: F401
-    import app.models_relationship  # noqa: F401
-
-    with engine.begin() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-    Base.metadata.create_all(bind=engine)
+    run_migrations()
