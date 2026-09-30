@@ -59,3 +59,20 @@
 3. Stored canonical facts with structural candidate lookup.
 4. Persisted, conservatively resolved entity graph; remove the keyword entity list.
 5. Temporal events and explicit uncertainty, driven by measured failures.
+
+### v0.10 — Bug-Fix & Hardening [COMPLETE]
+- Reproducible NLP dependency (pinned spaCy model) and startup validation.
+- Test database guard; Alembic migrations; database integrity constraints.
+- Deterministic, atomic, concurrency-safe memory evolution with reason codes.
+- Lifecycle-aware retrieval at the source; agent evidence == context evidence.
+- Persistent knowledge graph with conservative entity resolution; no domain
+  keyword lists.
+- Full-text lexical retrieval; structured retrieval candidates.
+- Provenance (`memory_evidence`) and lineage (`merged_into`, `fulfilled_by`).
+- **254/254 tests passing.**
+
+## Next Milestones (proposed)
+1. Stored `knowledge_facts` with structural `(entity, attribute)` candidate lookup.
+2. Entity disambiguation for identical names; conversational coreference.
+3. Explicit uncertainty in `ContextEvidence` (conflicting / insufficient evidence).
+4. ANN vector index once data volume is measured.

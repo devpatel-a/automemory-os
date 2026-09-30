@@ -30,22 +30,37 @@ AutoMemory OS intentionally relies on deterministic NLP algorithms, explicit dep
 
 ---
 
-## Additional Limitations Identified in the v0.9 Audit
-See `ARCHITECTURE_ASSESSMENT.md` §4–5 for details and proposed fixes.
+## Status of v0.9 Audit Findings (v0.10)
 
-- **Keyword entity list:** `understanding/memory_entity_extractor.py` still
-  hard-codes domain keywords (drinks, places, technologies, devices). This
-  contradicts the zero-hardcoding goal for the entity/graph layer.
-- **Graph persistence:** the knowledge graph is process-local and is lost on restart.
-- **Graph entity matching is substring-based:** "rahul" matches every node
-  whose label contains it.
-- **Evolution candidate pool:** classification only sees the top-5 semantic
-  neighbours. In large stores the conflicting same-attribute fact can be missed.
-- **No stored facts or provenance:** facts are re-extracted from text on every
-  use, and memories carry no source, message or extraction-method evidence.
-  MERGE overwrites the canonical text with the newest phrasing.
-- **Fulfilled plans:** `"I will move to Bangalore."` followed by
-  `"I moved to Bangalore."` merges the two memories, and the plan history is lost.
-- **Attribute cardinality** is a small static schema. Unknown attributes are
-  treated as multi-valued, so they are never contradicted.
-- **Tests share the configured database** and delete all rows.
+| Finding | Status |
+| :--- | :--- |
+| Keyword entity list (domain hard-coding) | **Resolved**: generic noun-chunk + NER entities |
+| Graph not persisted | **Resolved**: PostgreSQL graph, written in the evolution transaction |
+| Substring entity matching | **Resolved**: exact normalized name / explicit alias, longest span |
+| No provenance | **Resolved**: `memory_evidence` (append-only; legacy rows marked `legacy`) |
+| MERGE loses original statements | **Resolved**: evidence keeps every statement; `merged_into` lineage |
+| Fulfilled plans merged away | **Resolved**: never merged; `fulfilled_by` lineage |
+| Tests share the configured database | **Resolved**: tests refuse non-test databases |
+| Facts re-extracted on every use | **Mitigated**: bounded parse cache (~19x faster context builds); no stored facts table yet |
+| Top-5 evolution candidate pool | **Open**: see below |
+
+## Remaining Limitations (v0.10)
+
+- **Evolution candidate pool:** classification still sees the top-5 semantic
+  neighbours (plus a 50-candidate wide search only to resolve a contradiction
+  target). A conflicting same-attribute fact outside that pool is missed.
+  A stored `knowledge_facts` table with an `(entity, attribute)` index is the fix.
+- **Entity identity by name:** two different people who share exactly the same
+  name are one entity until an alias/disambiguation mechanism exists
+  (resolution never merges *different* names).
+- **No context-supported coreference:** "he", "my friend" across messages are not
+  resolved to entities.
+- **No ANN vector index:** exact cosine scans; add HNSW/IVFFlat (with iterative
+  scans for filtered queries) when measured data volume requires it.
+- **`relationship_score`** is reserved in `RetrievalCandidate` but not measured.
+- **Attribute cardinality** is a small static schema; unknown attributes are
+  treated as multi-valued (never contradicted).
+- **Legacy endpoints:** `GET /context` still uses the legacy
+  `context_service` (ILIKE over the whole query) rather than the ContextEngine;
+  kept for API compatibility.
+- **Lifecycle quirk:** reinforcement with `access_count < 3` sets `weak` (still retrievable).

@@ -18,8 +18,8 @@ Natural Language User Input
       ↓
 2. Hybrid Candidate Retrieval (app/retrieval_service.py):
    • Semantic vector search (pgvector, cosine distance)
-   • Keyword text search (SQL ILIKE)
-   • Knowledge Graph expansion (GraphSearch)
+   • Lexical full-text search (PostgreSQL tsvector, whole words)
+   • Knowledge Graph expansion (persistent graph, exact/alias entity resolution)
    • Multi-signal feature ranking (SEMANTIC 0.40, KEYWORD 0.20, GRAPH 0.15, IMPORTANCE 0.10, RECENCY 0.06, ACCESS 0.04, CATEGORY 0.05)
       ↓
 3. Knowledge Reasoning Engine (app/knowledge/):
@@ -42,7 +42,7 @@ Natural Language User Input
       ↓
 6. Knowledge Graph Indexing (app/graph/):
    • Nodes (entities & concepts) and Edges (semantic relationships & explicit user relationships like friend_of, brother_of)
-   • Thread-safe process-shared graph repository
+   • Persistent PostgreSQL graph (entities, aliases, memory links, typed relationships), written in the evolution transaction; process-local view kept for compatibility
       ↓
 7. Context Engine (app/context/):
    • Evidence evaluation, conflict resolution, temporal query intent (CURRENT, HISTORICAL, FUTURE), Jaccard near-duplicate diversity, token budgeting (1200 chars), prompt package assembly (ContextPackage)
@@ -116,3 +116,17 @@ A historical fact (`temporal_state = "HISTORICAL"`) remains in an `active` `Memo
 - **Configuration:** `app/config.py` (`DATABASE_URL`, `EMBEDDING_MODEL`,
   `CONTEXT_RETRIEVAL_LIMIT`, `CONTEXT_TOKEN_BUDGET`).
 - **Audit and gap analysis:** `ARCHITECTURE_ASSESSMENT.md`. **Measurement:** `EVALUATION.md`.
+
+---
+
+## v0.10 Notes (hardening)
+
+- **Evolution** executes exactly one handler per knowledge decision, on the exact
+  target chosen by the classifier, atomically (one transaction: memory, lineage,
+  graph and evidence), with row locks and retry on concurrent conflicts.
+- **Persistence:** Alembic migrations (`services/memory-service/alembic`), database
+  constraints, persistent graph, provenance (`memory_evidence`).
+- **Lineage:** `superseded_by`, `merged_into`, `fulfilled_by` in `memory_relationships`;
+  contradiction on the memory row (`contradicted_by_id`, FK).
+- **Startup validation:** spaCy model, embedding dimension vs. `vector(384)`, database.
+- See `ARCHITECTURE_ASSESSMENT.md` §7 for the v0.10 record.

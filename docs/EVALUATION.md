@@ -45,8 +45,17 @@ run exposed every defect listed there.
 
 ## Caveats
 
-- The dataset is small (10 scenarios, 14 queries, 20 extraction sentences) and
+- The dataset is small (11 scenarios, 16 queries, 20 extraction sentences) and
   was written alongside the fixes it checks. Treat the numbers as regression
   signals, not as estimates of general quality.
 - Ranking weights (`ranking_service.py`, `TEMPORAL_ALIGNMENT_BONUS`) should
   only be tuned against a larger, independently written query set.
+
+## v0.10
+
+- Graph checks read the **persisted** PostgreSQL graph.
+- New scenario `plan_fulfilment`. It exposed a ranking flaw (a fulfilled plan
+  outranked the past residence for "Where did I live before?"), which was fixed.
+  All metrics are at 1.000 on the current benchmark.
+- The runner's isolation (outer transaction, rolled back) also covers the graph
+  and evidence tables.

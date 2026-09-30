@@ -170,3 +170,40 @@ brief's decision-rule questions briefly.
 - Conservative entities: *Rahul Patel* ≠ *Rahul Sharma*, and "Rahul works at Google" creates no user edge.
 - Multi-valued attributes coexist.
 - The benchmark regression gate: `app/evaluation/test_benchmark.py`.
+
+---
+
+## 7. v0.10 Bug-Fix & Hardening Record
+
+Every item below has a regression test (see `CURRENT_TESTING.md`, v0.10).
+
+| # | Bug (reproduced) | Root cause | Fix |
+| :--- | :--- | :--- | :--- |
+| 1 | Clean installs could lack spaCy / `en_core_web_sm` | Not in requirements; model loaded twice at import | Pinned model wheel; single loader with actionable error; startup validation |
+| 2 | Contradiction branch unreachable; contradictions could archive `candidates[0]` | The pipeline re-derived the target after classification; `UPDATE/ARCHIVE` shared one branch | Classifier returns the exact target + reason codes; one handler per decision |
+| 3 | Partial state possible (new memory without lineage) | Every helper committed separately | One transaction per statement (`commit=False` helpers), rollback on failure |
+| 4 | Tests could wipe any database | `DELETE FROM memories` against `DATABASE_URL` | Guard in the helper and the pytest session; exit 4 on non-test DBs |
+| 5 | Archived claims were evolution candidates | `semantic_search` ignored lifecycle | Live-only by default; `include_archived=True` for history/audit |
+| 6 | Agent `memories_used` ≠ prompt evidence | Second independent retrieval | `memories_used` loaded from `ContextPackage.evidence` |
+| 7 | Reflection flagged memories contradicted from generated text | Assistant output treated as user evidence | Reported only, never written |
+| 8 | Graph lost on restart / not shared across workers | Process-local object | PostgreSQL graph written in the evolution transaction |
+| 9 | "rahul" matched Rahul Patel and Rahul Sharma | Substring label matching | Exact normalized name / explicit alias; longest span |
+| 10 | Entities existed only for curated values | Hard-coded keyword list | Generic noun-chunk + NER entities |
+| 11 | No schema history; delete with lineage failed (FK) | `create_all` only, no cascade | Alembic 0001–0004, FK/unique/CHECK constraints, cascades, indexes |
+| 12 | Service could start with a model incompatible with `vector(384)` | No dimension check | Startup validation (model and live column) |
+| 13 | `GET /memory` strengthened memories | Listing incremented access counters | Read-only by default |
+| 14 | `car` matched `career` | `ILIKE '%word%'` and substring scoring | PostgreSQL full-text search + whole-word scoring |
+| 15 | Original statements lost on merge; no provenance | Merge overwrote text; nothing recorded | Append-only `memory_evidence`; `merged_into` lineage |
+| 16 | Fulfilled plans merged away / kept answering future questions | Same (entity, attribute, value) merged | Never merge plan with completion; `fulfilled_by` lineage |
+| 17 | Lost update between concurrent reinforcements | Exact-match path read without a row lock | `FOR UPDATE` on read-modify-write paths |
+| 18 | Embedding-less memories vanished (plan-dependent) | HNSW index (added then removed in this series) skips NULLs | No ANN index until measured need |
+
+### Status of §4/§5 open items
+- Keyword entity list, graph persistence, substring graph matching, provenance,
+  test-database safety, migrations, agent/`memories_used` mismatch,
+  `GET /memory` mutation, `app.zip` and the stale SQL dump: **resolved** (the
+  two artifacts were removed; git history keeps them).
+- Stored canonical facts: **mitigated** by the parse cache (context build
+  ~482 ms → ~26 ms); a `knowledge_facts` table remains the long-term fix.
+- `GET /context` legacy endpoint, events/uncertainty: **open**
+  (`KNOWN_LIMITATIONS.md`).
