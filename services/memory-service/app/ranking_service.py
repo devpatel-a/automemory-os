@@ -82,6 +82,41 @@ def calculate_score(memory, distance):
     return score
 
 
+def compute_hybrid_signals(
+    memory,
+    semantic_distance: float | None,
+    graph_connected: bool,
+    query: str,
+) -> dict[str, float | None]:
+    """Independently measurable retrieval signals, each in [0, 1] (None = not measured)."""
+    cat_intent = infer_query_category(query)
+    return {
+        "semantic": normalize_similarity(semantic_distance) if semantic_distance is not None else None,
+        "lexical": calculate_keyword_score(memory.content, query),
+        "graph": 1.0 if graph_connected else 0.0,
+        "importance": float(getattr(memory, "importance", 0.5) or 0.5),
+        "recency": calculate_recency_score(getattr(memory, "last_accessed", None), getattr(memory, "created_at", None)),
+        "access": calculate_access_score(getattr(memory, "access_count", 0) or 0),
+        "category": 1.0 if (cat_intent and getattr(memory, "category", None) == cat_intent) else 0.0,
+    }
+
+
+def weighted_hybrid_score(signals: dict[str, float | None], is_contradicted: bool = False) -> float:
+    """Weighted combination of retrieval signals minus the contradiction penalty."""
+    score = (
+        SEMANTIC_WEIGHT * (signals["semantic"] or 0.0)
+        + KEYWORD_WEIGHT * signals["lexical"]
+        + GRAPH_WEIGHT * signals["graph"]
+        + IMPORTANCE_WEIGHT * signals["importance"]
+        + RECENCY_WEIGHT * signals["recency"]
+        + ACCESS_WEIGHT * signals["access"]
+        + CATEGORY_WEIGHT * signals["category"]
+    )
+    if is_contradicted:
+        score -= CONTRADICTION_PENALTY
+    return max(0.0, score)
+
+
 def compute_hybrid_rank_score(
     memory,
     semantic_distance: float | None,
@@ -93,29 +128,5 @@ def compute_hybrid_rank_score(
     Compute final relevance score combining all signals:
     Semantic + Keyword + Graph + Importance + Recency + Access + Category - Contradiction Penalty
     """
-    sem_score = normalize_similarity(semantic_distance) if semantic_distance is not None else 0.0
-    kw_score = calculate_keyword_score(memory.content, query)
-    graph_score = 1.0 if graph_connected else 0.0
-
-    imp_score = float(getattr(memory, "importance", 0.5) or 0.5)
-    rec_score = calculate_recency_score(getattr(memory, "last_accessed", None), getattr(memory, "created_at", None))
-    acc_score = calculate_access_score(getattr(memory, "access_count", 0) or 0)
-
-    cat_intent = infer_query_category(query)
-    cat_score = 1.0 if (cat_intent and getattr(memory, "category", None) == cat_intent) else 0.0
-
-    score = (
-        SEMANTIC_WEIGHT * sem_score
-        + KEYWORD_WEIGHT * kw_score
-        + GRAPH_WEIGHT * graph_score
-        + IMPORTANCE_WEIGHT * imp_score
-        + RECENCY_WEIGHT * rec_score
-        + ACCESS_WEIGHT * acc_score
-        + CATEGORY_WEIGHT * cat_score
-    )
-
-    # Contradiction / Archive handling
-    if getattr(memory, "is_contradicted", False):
-        score -= CONTRADICTION_PENALTY
-
-    return max(0.0, score)
+    signals = compute_hybrid_signals(memory, semantic_distance, graph_connected, query)
+    return weighted_hybrid_score(signals, bool(getattr(memory, "is_contradicted", False)))

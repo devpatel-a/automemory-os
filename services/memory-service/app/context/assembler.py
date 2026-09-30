@@ -66,4 +66,5 @@ def build_evidence(candidate: ContextCandidate) -> ContextEvidence:
         confidence=getattr(memory, "confidence", None),
         score=candidate.evidence_score or candidate.score,
         reasons=list(candidate.explanation),
+        signals=candidate.retrieval.signals() if candidate.retrieval is not None else {},
     )
