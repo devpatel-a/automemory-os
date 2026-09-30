@@ -71,15 +71,19 @@ NOUN_ATTRIBUTE_MAP = {
 }
 
 
-EMPLOYMENT_PREPOSITIONS = {"at", "for", ""}
+EMPLOYMENT_PREPOSITIONS = {"at", "for"}
 
 
-def _work_preposition(verb_token) -> str:
-    """Preposition governing the object of 'work' ("at", "for", "on", "with", ...), or ''."""
-    for child in verb_token.children:
-        if child.dep_ == "prep":
-            return child.lower_
-    return ""
+def _work_non_employment_preposition(verb_token) -> str | None:
+    """
+    For 'work': the first governing preposition when none of them marks
+    employment ("work on X", "work with X"), else None ("work at/for X",
+    or no preposition at all).
+    """
+    preps = [child.lower_ for child in verb_token.children if child.dep_ == "prep"]
+    if not preps or any(p in EMPLOYMENT_PREPOSITIONS for p in preps):
+        return None
+    return preps[0]
 
 
 def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
@@ -196,10 +200,10 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
             attribute, fact_type = "device", "DEVICE"
         else:
             attribute, fact_type = "tool", "OTHER"
-    elif verb_lemma == "work" and _work_preposition(verb_token) not in EMPLOYMENT_PREPOSITIONS:
+    elif verb_lemma == "work" and _work_non_employment_preposition(verb_token):
         # "work on my laptop" / "work with William" describe a focus or a
         # collaborator, not an employer.
-        attribute, fact_type = f"work_{_work_preposition(verb_token)}", "OTHER"
+        attribute, fact_type = f"work_{_work_non_employment_preposition(verb_token)}", "OTHER"
     elif verb_lemma in VERB_ATTRIBUTE_MAP:
         attribute, fact_type = VERB_ATTRIBUTE_MAP[verb_lemma]
     elif verb_token:
