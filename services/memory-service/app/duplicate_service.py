@@ -1,4 +1,7 @@
+import logging
 from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.90
 
@@ -22,11 +25,10 @@ def find_duplicate(candidates):
 
     similarity = 1 - distance
 
-    print("=" * 50)
-    print("Candidate :", memory.content)
-    print("Distance  :", distance)
-    print("Similarity:", similarity)
-    print("=" * 50)
+    logger.debug(
+        "duplicate check: candidate=%r distance=%.4f similarity=%.4f",
+        memory.content, distance, similarity,
+    )
 
     if similarity >= SIMILARITY_THRESHOLD:
         return memory

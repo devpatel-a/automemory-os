@@ -45,6 +45,11 @@ def is_merge_equivalent(new_parsed, existing_mem, distance=None) -> bool:
         if norm_n_ent == norm_e_ent and norm_n_attr == norm_e_attr:
             if new_fact.is_negated or existing_fact.is_negated:
                 return False
+            # A plan and the fact that fulfils it are different facts: never
+            # merge a FUTURE fact with a non-FUTURE one (fulfilment is linked
+            # as lineage instead, see MemoryPipeline).
+            if (new_fact.temporal_state == "FUTURE") != (existing_fact.temporal_state == "FUTURE"):
+                return False
             return norm_n_val == norm_e_val
         else:
             return False

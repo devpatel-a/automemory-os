@@ -13,7 +13,9 @@ from app.service import (
     supersede_existing_fact_memory,
     update_existing_fact_memory,
 )
+from app import lineage
 from app.lineage import historical_memory_ids
+from app.knowledge.fact_extractor import extract_fact
 from app.models import Memory
 from app.semantic.semantic_service import generate_embedding, semantic_search
 from app.understanding.memory_parser import parse_memory
@@ -162,6 +164,9 @@ class MemoryPipeline:
             target=target,
         )
         evolution.reason_codes = list(knowledge.reason_codes) + evolution.reason_codes
+        evolution.reason_codes += self._link_fulfilled_plans(
+            evolution.memory, knowledge.fact, candidates, historical,
+        )
 
         # 6a. Persistent knowledge graph, in the same transaction as the evolution
         self.graph_service.persist_memory(parsed_memory, evolution.memory.id)
@@ -271,6 +276,34 @@ class MemoryPipeline:
         return _Evolution(memory, reasons)
 
     # --------------------------------------------------------------- helpers
+
+    def _link_fulfilled_plans(self, memory, fact, candidates, historical) -> list[str]:
+        """
+        A CURRENT, non-negated fact that matches a stored FUTURE plan (same
+        entity, attribute and value) is evidence the plan happened: link
+        plan --fulfilled_by--> fact. The plan stays stored and queryable, but
+        is effectively HISTORICAL from then on. Time passing alone never does this.
+        """
+        if fact is None or fact.temporal_state != "CURRENT" or fact.is_negated or not fact.attribute:
+            return []
+        key = (fact.entity.strip().lower(), fact.attribute.strip().lower(), fact.value.strip().lower())
+        reasons = []
+        for item in candidates:
+            plan = get_memory_object(item)
+            if plan.id == memory.id or plan.id in historical or plan.state == "archived":
+                continue
+            plan_fact = extract_fact(parse_memory(plan.content))
+            if plan_fact is None or plan_fact.temporal_state != "FUTURE" or plan_fact.is_negated:
+                continue
+            plan_key = (
+                plan_fact.entity.strip().lower(),
+                plan_fact.attribute.strip().lower(),
+                plan_fact.value.strip().lower(),
+            )
+            if plan_key == key:
+                lineage.link(self.db, plan.id, memory.id, lineage.FULFILLED_BY)
+                reasons.append("fulfilled_plan:%d" % plan.id)
+        return reasons
 
     def _lock_live(self, memory: Memory) -> Memory:
         """Row-lock a target and verify it is still a live evolution target."""
