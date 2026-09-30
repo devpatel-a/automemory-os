@@ -1,4 +1,5 @@
 from app.knowledge.knowledge_types import KnowledgeDecision
+from app.knowledge.temporal_cues import has_transition_evidence
 from app.knowledge.fact_extractor import extract_fact
 from app.knowledge.contradiction_detector import detect_contradiction
 from app.understanding.memory_parser import parse_memory
@@ -109,7 +110,7 @@ def classify_knowledge(
                                 continue
 
                             # Explicit transition evidence -> SUPERSESSION
-                            has_transition = any(tr in content_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
+                            has_transition = has_transition_evidence(content_lower)
                             if has_transition:
                                 return KnowledgeDecision.SUPERSESSION
 

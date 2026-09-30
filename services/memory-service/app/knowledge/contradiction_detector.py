@@ -1,6 +1,7 @@
 from app.understanding.models import ParsedMemory
 from app.knowledge.fact_extractor import extract_fact
 from app.understanding.memory_parser import parse_memory
+from app.knowledge.temporal_cues import has_transition_evidence
 
 
 def detect_contradiction(
@@ -37,7 +38,7 @@ def detect_contradiction(
 
             # Explicit transition phrasing ("moved to", "transferred to", etc.) is NOT a contradiction
             content_lower = new_memory.content.lower()
-            has_transition = any(tr in content_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
+            has_transition = has_transition_evidence(content_lower)
             if has_transition:
                 return False
 

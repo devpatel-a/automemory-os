@@ -1,6 +1,13 @@
 import spacy
 from app.knowledge.fact_models import KnowledgeFact
 from app.understanding.models import ParsedMemory
+from app.knowledge.temporal_cues import (
+    FUTURE_CUES,
+    NEGATION_TRANSITION_CUES,
+    PAST_CUES,
+    contains_cue,
+    has_transition_evidence,
+)
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -194,22 +201,20 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     temporal_state = "CURRENT"
     text_lower = raw_text.lower()
 
-    past_indicators = {"lived", "worked", "was", "used to", "previously", "formerly", "before", "earlier", "last year"}
-    future_indicators = {"will", "going to", "tomorrow", "next", "future"}
-    has_transition = any(tr in text_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
+    has_transition = has_transition_evidence(text_lower)
 
-    if any(ind in text_lower for ind in past_indicators) or (verb_token and verb_token.tag_ in ("VBD", "VBN")):
+    if contains_cue(text_lower, PAST_CUES) or (verb_token and verb_token.tag_ in ("VBD", "VBN")):
         if has_transition:
             temporal_info = "current"
             temporal_state = "CURRENT"
         else:
             temporal_info = "past"
             temporal_state = "HISTORICAL"
-    elif any(ind in text_lower for ind in future_indicators):
+    elif contains_cue(text_lower, FUTURE_CUES):
         temporal_info = "future"
         temporal_state = "FUTURE"
 
-    if is_negated and ("anymore" in text_lower or "longer" in text_lower or "no longer" in text_lower):
+    if is_negated and contains_cue(text_lower, NEGATION_TRANSITION_CUES):
         temporal_state = "HISTORICAL"
 
     # 5. Deterministic Confidence Calculation

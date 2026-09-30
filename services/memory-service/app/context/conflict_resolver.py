@@ -1,40 +1,25 @@
 from app.context.models import ContextCandidate
 from app.knowledge.fact_extractor import extract_fact
 from app.understanding.memory_parser import parse_memory
+from app.knowledge.temporal_cues import (
+    FUTURE_QUERY_CUES,
+    HISTORICAL_QUERY_CUES,
+    contains_cue,
+)
 
-HISTORICAL_KEYWORDS = {
-    "before",
-    "previously",
-    "past",
-    "history",
-    "used to",
-    "formerly",
-    "lived in",
-    "was",
-    "earlier",
-    "did i",
-}
-
-FUTURE_KEYWORDS = {
-    "will",
-    "going to",
-    "future",
-    "next year",
-    "tomorrow",
-    "plan to",
-}
+# Backward-compatible aliases; the cue lists live in app.knowledge.temporal_cues.
+HISTORICAL_KEYWORDS = HISTORICAL_QUERY_CUES
+FUTURE_KEYWORDS = FUTURE_QUERY_CUES
 
 
 def is_historical_query(query: str) -> bool:
     """Detect if query explicitly asks for historical or past context."""
-    q_lower = query.lower()
-    return any(kw in q_lower for kw in HISTORICAL_KEYWORDS)
+    return contains_cue(query, HISTORICAL_QUERY_CUES)
 
 
 def is_future_query(query: str) -> bool:
     """Detect if query explicitly asks for future context."""
-    q_lower = query.lower()
-    return any(kw in q_lower for kw in FUTURE_KEYWORDS)
+    return contains_cue(query, FUTURE_QUERY_CUES)
 
 
 def resolve_conflicts(
