@@ -31,7 +31,15 @@ class ContextEngine:
         self,
         db,
         query: str,
+        limit: int | None = None,
     ):
+        """
+        Build the final ContextPackage. `limit` caps how many memories are
+        selected (defaults to CONTEXT_RETRIEVAL_LIMIT). The package's
+        evidence is the single source of truth for what a downstream
+        prompt/agent may use.
+        """
+        selection_limit = min(limit, settings.context_retrieval_limit) if limit else settings.context_retrieval_limit
         if not query or not query.strip():
             return assemble_context(query=query, candidates=[])
 
@@ -92,7 +100,7 @@ class ContextEngine:
         # 7. Near-Duplicate Diversity Optimization
         diversified = diversify_candidates(
             ranked,
-            limit=settings.context_retrieval_limit,
+            limit=selection_limit,
         )
 
         # 8. Token Budget Optimization
