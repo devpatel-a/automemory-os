@@ -198,7 +198,16 @@ def get_memories(
     min_importance: float | None = None,
     keyword: str | None = None,
     db: Session | None = None,
+    record_access: bool = False,
 ):
+    """
+    List live memories.
+
+    Administrative listing by default: it does NOT touch access_count,
+    last_accessed or lifecycle state, so dashboards cannot artificially
+    strengthen memories. Pass record_access=True only when the listing is a
+    genuine cognitive retrieval of these memories.
+    """
     db_session = db if db is not None else SessionLocal()
 
     try:
@@ -220,13 +229,14 @@ def get_memories(
 
         memories = query.order_by(desc(Memory.importance)).all()
 
-        for memory in memories:
-            memory.access_count += 1
-            memory.last_accessed = datetime.now(UTC)
-            update_memory_state(memory)
-            decay_memory(memory)
+        if record_access:
+            for memory in memories:
+                memory.access_count += 1
+                memory.last_accessed = datetime.now(UTC)
+                update_memory_state(memory)
+                decay_memory(memory)
+            db_session.commit()
 
-        db_session.commit()
         return memories
 
     finally:
