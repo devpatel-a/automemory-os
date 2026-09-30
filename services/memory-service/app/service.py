@@ -488,3 +488,42 @@ def merge_existing_memories(
         lineage.link(db, merged_id, canonical_id, lineage.MERGED_INTO)
 
     return _persist(db, canonical, commit)
+
+
+def get_memory_evidence(memory_id: int, db: Session) -> dict:
+    """Evidence records and lineage links for one memory (read-only)."""
+    from .provenance.models import MemoryEvidence
+
+    memory = db.get(Memory, memory_id)
+    if memory is None:
+        raise HTTPException(status_code=404, detail="Memory not found.")
+
+    evidence = (
+        db.query(MemoryEvidence)
+        .filter(MemoryEvidence.memory_id == memory_id)
+        .order_by(MemoryEvidence.observed_at, MemoryEvidence.id)
+        .all()
+    )
+    rels = db.query(MemoryRelationship).filter(
+        (MemoryRelationship.source_memory_id == memory_id)
+        | (MemoryRelationship.target_memory_id == memory_id)
+    ).all()
+    other_ids = {r.source_memory_id for r in rels} | {r.target_memory_id for r in rels}
+    if memory.contradicted_by_id:
+        other_ids.add(memory.contradicted_by_id)
+    others = {m.id: m for m in db.query(Memory).filter(Memory.id.in_(other_ids))} if other_ids else {}
+
+    def link(relationship_type, other_id):
+        return {
+            "relationship_type": relationship_type,
+            "memory_id": other_id,
+            "content": others[other_id].content if other_id in others else "",
+        }
+
+    return {
+        "memory": memory,
+        "evidence": evidence,
+        "outgoing": [link(r.relationship_type, r.target_memory_id) for r in rels if r.source_memory_id == memory_id],
+        "incoming": [link(r.relationship_type, r.source_memory_id) for r in rels if r.target_memory_id == memory_id],
+        "contradicted_by": link("contradicted_by", memory.contradicted_by_id) if memory.contradicted_by_id else None,
+    }

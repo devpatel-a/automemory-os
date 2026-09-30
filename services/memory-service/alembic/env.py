@@ -11,6 +11,7 @@ from app.database import Base
 import app.models  # noqa: F401  (register tables)
 import app.models_relationship  # noqa: F401
 import app.graph.db_models  # noqa: F401
+import app.provenance.models  # noqa: F401
 
 target_metadata = Base.metadata
 

@@ -22,6 +22,7 @@ from app.testing_support import assert_test_database, run_migrations
 import app.models  # noqa: F401
 import app.models_relationship  # noqa: F401
 import app.graph.db_models  # noqa: F401
+import app.provenance.models  # noqa: F401
 
 
 @pytest.fixture
@@ -146,3 +147,9 @@ def test_legacy_create_all_database_upgrades_without_data_loss(scratch_engine):
             "SELECT convalidated FROM pg_constraint WHERE conname = 'ck_memory_relationships_no_self_link'"
         )).scalar()
         assert validated is False
+        # provenance backfill: one honest 'legacy' row per memory, nothing fabricated
+        legacy = conn.execute(text(
+            "SELECT e.source_type, e.observed_at = m.created_at, e.raw_text, e.extraction_method, e.message_id "
+            "FROM memory_evidence e JOIN memories m ON m.id = e.memory_id"
+        )).all()
+        assert [tuple(r) for r in legacy] == [("legacy", True, None, None, None)] * 3

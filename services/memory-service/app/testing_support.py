@@ -42,6 +42,7 @@ def reset_database() -> None:
     import app.models  # noqa: F401  register tables
     import app.models_relationship  # noqa: F401
     import app.graph.db_models  # noqa: F401
+    import app.provenance.models  # noqa: F401
 
     tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
     with engine.begin() as conn:

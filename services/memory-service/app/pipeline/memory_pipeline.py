@@ -25,6 +25,12 @@ from app.knowledge.contradiction_detector import detect_contradiction
 from app.knowledge.knowledge_types import KnowledgeDecision
 from app.decision.decision_engine import decide
 from app.graph.graph_service import GraphService
+from app.provenance.models import (
+    DETERMINISTIC_NLP,
+    EXTRACTOR_VERSION,
+    MemoryEvidence,
+    Provenance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +104,7 @@ class MemoryPipeline:
         self,
         content: str,
         category: str,
+        provenance: Provenance | None = None,
     ):
         # 1. Understanding (and the one embedding this statement needs)
         parsed_memory = parse_memory(content)
@@ -108,7 +115,7 @@ class MemoryPipeline:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 knowledge, decision, evolution = self._evolve(
-                    content, category, parsed_memory, embedding,
+                    content, category, parsed_memory, embedding, provenance,
                 )
                 self.db.commit()
                 break
@@ -141,7 +148,7 @@ class MemoryPipeline:
 
     # ------------------------------------------------------------------ core
 
-    def _evolve(self, content, category, parsed_memory, embedding):
+    def _evolve(self, content, category, parsed_memory, embedding, provenance=None):
         self.db.expire_all()
         candidates = semantic_search(
             self.db, content, limit=CANDIDATE_LIMIT, query_embedding=embedding,
@@ -167,6 +174,9 @@ class MemoryPipeline:
         evolution.reason_codes += self._link_fulfilled_plans(
             evolution.memory, knowledge.fact, candidates, historical,
         )
+
+        # Provenance: append-only evidence for the memory this statement produced/affected
+        self._record_evidence(evolution, knowledge, content, provenance)
 
         # 6a. Persistent knowledge graph, in the same transaction as the evolution
         self.graph_service.persist_memory(parsed_memory, evolution.memory.id)
@@ -276,6 +286,25 @@ class MemoryPipeline:
         return _Evolution(memory, reasons)
 
     # --------------------------------------------------------------- helpers
+
+    def _record_evidence(self, evolution, knowledge, content, provenance) -> None:
+        provenance = provenance or Provenance()
+        evidence = MemoryEvidence(
+            memory_id=evolution.memory.id,
+            source_type=provenance.source_type,
+            conversation_id=provenance.conversation_id,
+            message_id=provenance.message_id,
+            extraction_method=DETERMINISTIC_NLP,
+            extractor_version=EXTRACTOR_VERSION,
+            confidence=knowledge.fact.confidence if knowledge.fact is not None else None,
+            raw_text=content,
+            decision=knowledge.decision.value,
+            reason_codes=list(evolution.reason_codes),
+        )
+        if provenance.observed_at is not None:
+            evidence.observed_at = provenance.observed_at
+        self.db.add(evidence)
+        self.db.flush()
 
     def _link_fulfilled_plans(self, memory, fact, candidates, historical) -> list[str]:
         """
