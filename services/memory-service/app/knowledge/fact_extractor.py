@@ -3,6 +3,7 @@ from app.knowledge.fact_models import KnowledgeFact
 from app.understanding.models import ParsedMemory
 from app.knowledge.temporal_cues import (
     FUTURE_CUES,
+    INTENTION_VERB_LEMMAS,
     NEGATION_TRANSITION_CUES,
     PAST_CUES,
     contains_cue,
@@ -70,6 +71,17 @@ NOUN_ATTRIBUTE_MAP = {
 }
 
 
+EMPLOYMENT_PREPOSITIONS = {"at", "for", ""}
+
+
+def _work_preposition(verb_token) -> str:
+    """Preposition governing the object of 'work' ("at", "for", "on", "with", ...), or ''."""
+    for child in verb_token.children:
+        if child.dep_ == "prep":
+            return child.lower_
+    return ""
+
+
 def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     """
     Generic linguistic fact extractor using spaCy dependency parsing, POS tags,
@@ -97,6 +109,18 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         if token.pos_ in ("VERB", "AUX") and token.dep_ not in ("aux", "auxpass"):
             verb_token = token
             break
+
+    # Intention verbs ("plan", "intend", ...) describe a planned state carried by
+    # their open clausal complement: "I am planning to move to Bangalore".
+    is_intention = False
+    if verb_token is not None and verb_token.lemma_.lower() in INTENTION_VERB_LEMMAS:
+        complement = next(
+            (c for c in verb_token.children if c.dep_ == "xcomp" and c.pos_ in ("VERB", "AUX")),
+            None,
+        )
+        if complement is not None:
+            verb_token = complement
+            is_intention = True
 
     possessive_my = any(t.lower_ in USER_PRONOUNS and t.dep_ == "poss" for t in doc)
 
@@ -157,6 +181,10 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
             attribute, fact_type = "device", "DEVICE"
         else:
             attribute, fact_type = "tool", "OTHER"
+    elif verb_lemma == "work" and _work_preposition(verb_token) not in EMPLOYMENT_PREPOSITIONS:
+        # "work on my laptop" / "work with William" describe a focus or a
+        # collaborator, not an employer.
+        attribute, fact_type = f"work_{_work_preposition(verb_token)}", "OTHER"
     elif verb_lemma in VERB_ATTRIBUTE_MAP:
         attribute, fact_type = VERB_ATTRIBUTE_MAP[verb_lemma]
     elif verb_token:
@@ -165,6 +193,7 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
 
     # 3. Multi-token Value Extraction
     val_tokens = []
+    direct_object_value = None
     for token in doc:
         if token.dep_ in ("pobj", "dobj", "attr"):
             chunk = [t for t in token.subtree if t.dep_ in ("compound", "amod", "flat", "pobj", "dobj", "attr") or t == token]
@@ -172,6 +201,8 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
             val_text = " ".join(t.text for t in chunk).strip(".,!?\"'")
             if val_text and val_text.lower() not in USER_PRONOUNS and val_text.lower() != entity.lower():
                 val_tokens.append(val_text)
+                if token.dep_ == "dobj" and direct_object_value is None:
+                    direct_object_value = val_text
 
     if not val_tokens:
         for chunk in doc.noun_chunks:
@@ -179,7 +210,11 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
             if chunk_text.lower() not in USER_PRONOUNS and chunk_text.lower() != (subj_token.text.lower() if subj_token else ""):
                 val_tokens.append(chunk_text)
 
-    value = val_tokens[-1].strip() if val_tokens else ""
+    if direct_object_value:
+        # "I use my MacBook Air for development" -> MacBook Air, not development
+        value = direct_object_value.strip()
+    else:
+        value = val_tokens[-1].strip() if val_tokens else ""
 
     if not value or value.lower() in ("this", "that", "it", "something", "anything"):
         if attribute:
@@ -210,7 +245,7 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         else:
             temporal_info = "past"
             temporal_state = "HISTORICAL"
-    elif contains_cue(text_lower, FUTURE_CUES):
+    elif is_intention or contains_cue(text_lower, FUTURE_CUES):
         temporal_info = "future"
         temporal_state = "FUTURE"
 

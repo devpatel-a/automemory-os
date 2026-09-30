@@ -106,6 +106,7 @@ class MemoryPipeline:
                                 ef
                                 and ef.entity.strip().lower() == norm_ent
                                 and ef.attribute.strip().lower() == norm_attr
+                                and ef.temporal_state != "FUTURE"
                             ):
                                 target_mem = cm
                                 break
@@ -120,6 +121,7 @@ class MemoryPipeline:
                                 ef
                                 and ef.entity.strip().lower() == norm_ent
                                 and ef.attribute.strip().lower() == norm_attr
+                                and ef.temporal_state != "FUTURE"
                             ):
                                 target_mem = cm
                                 break

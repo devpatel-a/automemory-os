@@ -2,6 +2,7 @@ from app.understanding.models import ParsedMemory
 from app.knowledge.fact_extractor import extract_fact
 from app.understanding.memory_parser import parse_memory
 from app.knowledge.temporal_cues import has_transition_evidence
+from app.knowledge.attribute_schema import is_single_valued
 
 
 def detect_contradiction(
@@ -36,6 +37,10 @@ def detect_contradiction(
             if new_fact.value.strip().lower() == existing_fact.value.strip().lower():
                 return False
 
+            # Multi-valued attributes: different values coexist ("I like coffee." + "I like tea.")
+            if not is_single_valued(new_fact):
+                return False
+
             # Explicit transition phrasing ("moved to", "transferred to", etc.) is NOT a contradiction
             content_lower = new_memory.content.lower()
             has_transition = has_transition_evidence(content_lower)
@@ -43,7 +48,7 @@ def detect_contradiction(
                 return False
 
             # If incoming fact is FUTURE or HISTORICAL, it is not a current claim contradiction
-            if new_fact.temporal_state in ("FUTURE", "HISTORICAL") or existing_fact.temporal_state == "HISTORICAL":
+            if new_fact.temporal_state in ("FUTURE", "HISTORICAL") or existing_fact.temporal_state in ("FUTURE", "HISTORICAL"):
                 return False
 
             # Direct contradiction on current claims without transition evidence
