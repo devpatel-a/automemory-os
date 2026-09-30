@@ -39,6 +39,11 @@ def calculate_importance(category: str) -> float:
 
 
 def update_memory_state(memory: Memory):
+    # Access-driven lifecycle only moves between active/weak. Leaving 'archived'
+    # is an explicit evolution decision (merge/contradiction lineage), never a
+    # side effect of access counting.
+    if memory.state == "archived":
+        return
     if memory.access_count >= 3:
         memory.state = "active"
     else:
@@ -46,11 +51,19 @@ def update_memory_state(memory: Memory):
 
 
 def decay_memory(memory: Memory):
+    """
+    Demote low-importance, rarely accessed memories to 'weak'.
+
+    Decay never archives: 'archived' is reserved for merged duplicates and
+    contradicted memories. Rarely accessed != false, and archiving here used to
+    hide freshly reinforced memories (e.g. a repeated low-importance fact).
+    """
     if (
-        memory.importance < 0.5
+        memory.state == "active"
+        and memory.importance < 0.5
         and memory.access_count < 3
     ):
-        memory.state = "archived"
+        memory.state = "weak"
 
 
 def create_memory(
@@ -64,13 +77,27 @@ def create_memory(
     db_session = db if db is not None else SessionLocal()
 
     try:
+        # Prefer a live (non-archived) exact match.
         existing = (
             db_session.query(Memory)
             .filter(
                 Memory.content == content
             )
+            .order_by((Memory.state == "archived").asc(), Memory.id.asc())
             .first()
         )
+
+        if existing is not None and existing.state == "archived":
+            if existing.is_contradicted:
+                # The user explicitly re-asserted a previously contradicted
+                # statement: it is the newest evidence, so reactivate it.
+                existing.state = "active"
+                existing.is_contradicted = False
+                existing.contradicted_by_id = None
+            else:
+                # Archived merged duplicate: never resurrect it; let the
+                # canonical memory be found through the semantic path.
+                existing = None
 
         if existing:
             existing.importance = min(
@@ -92,6 +119,12 @@ def create_memory(
             query=content,
             limit=5,
         )
+
+        # Archived memories (merged or contradicted) must not absorb new evidence.
+        candidates = [
+            (m, d) for m, d in candidates
+            if getattr(m, "state", None) != "archived"
+        ]
 
         duplicate = find_duplicate(candidates)
 
