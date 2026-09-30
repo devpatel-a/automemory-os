@@ -1,12 +1,10 @@
-import spacy
-
+from app.nlp import parse_text
 from app.understanding.models import Entity
 
 from app.understanding.memory_entity_extractor import (
     extract_memory_entities,
 )
 
-nlp = spacy.load("en_core_web_sm")
 
 
 def extract_entities(
@@ -16,7 +14,7 @@ def extract_entities(
     Extract named entities using spaCy.
     """
 
-    doc = nlp(text)
+    doc = parse_text(text)
 
     entities = []
 

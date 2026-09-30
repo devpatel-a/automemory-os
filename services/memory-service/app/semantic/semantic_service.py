@@ -1,20 +1,37 @@
+import logging
+
 from sentence_transformers import SentenceTransformer
 
 from app.config import settings
-from app.models import Memory
+from app.models import EMBEDDING_DIMENSION, Memory
 
-print("Loading embedding model...")
+logger = logging.getLogger(__name__)
 
+
+class EmbeddingDimensionMismatch(RuntimeError):
+    pass
+
+
+logger.info("Loading embedding model %s", settings.embedding_model)
 model = SentenceTransformer(settings.embedding_model)
 
-print("Embedding model ready.")
+
+def embedding_dimension() -> int:
+    """Dimension of vectors produced by the configured embedding model."""
+    return int(model.get_sentence_embedding_dimension())
 
 
 def generate_embedding(text: str) -> list[float]:
     """
     Generate a vector embedding for text.
     """
-    return model.encode(text).tolist()
+    vector = model.encode(text).tolist()
+    if len(vector) != EMBEDDING_DIMENSION:
+        raise EmbeddingDimensionMismatch(
+            f"Embedding model '{settings.embedding_model}' produced {len(vector)}-dimensional "
+            f"vectors but memories.embedding is vector({EMBEDDING_DIMENSION})."
+        )
+    return vector
 
 
 def semantic_search(

@@ -4,6 +4,11 @@ from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from .database import Base
 
+# Vector dimension of memories.embedding. Changing it requires a migration;
+# the configured embedding model must produce vectors of this size
+# (validated at startup, see app/startup.py).
+EMBEDDING_DIMENSION = 384
+
 
 class Memory(Base):
     __tablename__ = "memories"
@@ -17,7 +22,7 @@ class Memory(Base):
     importance: Mapped[float] = mapped_column(Float, default=0.5)
 
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(384),
+        Vector(EMBEDDING_DIMENSION),
         nullable=True,
     )
 
