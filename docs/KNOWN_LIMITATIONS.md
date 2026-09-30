@@ -27,3 +27,25 @@ AutoMemory OS intentionally relies on deterministic NLP algorithms, explicit dep
 
 ### 5. Non-Probabilistic Storage
 - AutoMemory OS uses discrete confidence scores and state flags rather than probabilistic graphical models.
+
+---
+
+## Additional Limitations Identified in the v0.9 Audit
+See `ARCHITECTURE_ASSESSMENT.md` §4–5 for details and proposed fixes.
+
+- **Keyword entity list:** `understanding/memory_entity_extractor.py` still
+  hard-codes domain keywords (drinks, places, technologies, devices). This
+  contradicts the zero-hardcoding goal for the entity/graph layer.
+- **Graph persistence:** the knowledge graph is process-local and is lost on restart.
+- **Graph entity matching is substring-based:** "rahul" matches every node
+  whose label contains it.
+- **Evolution candidate pool:** classification only sees the top-5 semantic
+  neighbours. In large stores the conflicting same-attribute fact can be missed.
+- **No stored facts or provenance:** facts are re-extracted from text on every
+  use, and memories carry no source, message or extraction-method evidence.
+  MERGE overwrites the canonical text with the newest phrasing.
+- **Fulfilled plans:** `"I will move to Bangalore."` followed by
+  `"I moved to Bangalore."` merges the two memories, and the plan history is lost.
+- **Attribute cardinality** is a small static schema. Unknown attributes are
+  treated as multi-valued, so they are never contradicted.
+- **Tests share the configured database** and delete all rows.

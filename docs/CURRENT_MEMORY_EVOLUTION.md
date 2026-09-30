@@ -31,3 +31,34 @@ Memory Evolution governs how new natural language facts interact with existing m
 
 ### 3. "No-Longer" Negation Handling
 - Statements like `"I do not live in Mumbai anymore."` transition the existing fact state to `HISTORICAL` without fabricating replacement values or dummy entries.
+
+---
+
+## v0.9 Additions
+
+### Attribute Cardinality (`app/knowledge/attribute_schema.py`)
+- Contradiction and supersession apply only to **single-valued** attributes:
+  `residence`, `employer`, `name`, `age`, `favorite_*`, and
+  LOCATION / EMPLOYMENT / PROFILE facts.
+- Multi-valued attributes (preferences, devices, tools, learning topics,
+  verb-derived relations) keep different values side by side:
+  `"I like coffee."` + `"I like tea."` → two active memories.
+- Unknown attributes default to multi-valued. A false contradiction archives a
+  true memory; a missed one does not.
+
+### Future Plans Are Protected
+- A stored `FUTURE` fact is never contradicted or chosen as a supersession
+  target by a different current value.
+- Intention verbs create FUTURE facts: `"I am planning to move to Bangalore."`
+  → `(user, residence, Bangalore, FUTURE)`.
+
+### Re-assertion
+- Re-stating a previously contradicted fact reactivates that memory (it is the
+  newest explicit evidence). The competing claim is then contradicted.
+  `Mumbai → Pune → Mumbai` ends with Mumbai active and Pune archived.
+- A memory is never contradicted by itself. Archived merged duplicates are
+  never resurrected.
+
+### Lifecycle
+- Decay demotes to `weak` and never archives.
+- Access counting never moves a memory out of `archived`.

@@ -1,45 +1,33 @@
 from app.context.models import ContextCandidate
+from app.context.query_intent import CURRENT, FUTURE
+from app.knowledge.attribute_schema import fact_domain_key
 from app.knowledge.fact_extractor import extract_fact
 from app.understanding.memory_parser import parse_memory
+from app.knowledge.temporal_cues import (
+    FUTURE_QUERY_CUES,
+    HISTORICAL_QUERY_CUES,
+    contains_cue,
+)
 
-HISTORICAL_KEYWORDS = {
-    "before",
-    "previously",
-    "past",
-    "history",
-    "used to",
-    "formerly",
-    "lived in",
-    "was",
-    "earlier",
-    "did i",
-}
-
-FUTURE_KEYWORDS = {
-    "will",
-    "going to",
-    "future",
-    "next year",
-    "tomorrow",
-    "plan to",
-}
+# Backward-compatible aliases; the cue lists live in app.knowledge.temporal_cues.
+HISTORICAL_KEYWORDS = HISTORICAL_QUERY_CUES
+FUTURE_KEYWORDS = FUTURE_QUERY_CUES
 
 
 def is_historical_query(query: str) -> bool:
     """Detect if query explicitly asks for historical or past context."""
-    q_lower = query.lower()
-    return any(kw in q_lower for kw in HISTORICAL_KEYWORDS)
+    return contains_cue(query, HISTORICAL_QUERY_CUES)
 
 
 def is_future_query(query: str) -> bool:
     """Detect if query explicitly asks for future context."""
-    q_lower = query.lower()
-    return any(kw in q_lower for kw in FUTURE_KEYWORDS)
+    return contains_cue(query, FUTURE_QUERY_CUES)
 
 
 def resolve_conflicts(
     candidates: list[ContextCandidate],
     query: str,
+    superseded_ids: set[int] | None = None,
 ) -> list[ContextCandidate]:
     """
     Resolves fact domain conflicts and applies state & contradiction safety filters:
@@ -50,7 +38,10 @@ def resolve_conflicts(
        - Merged archived memories (is_contradicted = False) are NOT treated as contradictions.
        - Active canonical memory is preferred.
     3. Temporal Intent Resolution:
-       - CURRENT query favors CURRENT facts over superseded/historical facts.
+       - Superseded lineage (MemoryRelationship 'superseded_by', passed as
+         superseded_ids) makes a memory effectively HISTORICAL.
+       - CURRENT query favors CURRENT facts over superseded/historical facts
+         and never lets a FUTURE plan answer a current question.
        - HISTORICAL query retains and favors HISTORICAL facts.
        - FUTURE query favors FUTURE facts.
     """
@@ -61,7 +52,6 @@ def resolve_conflicts(
     future_intent = is_future_query(query)
 
     # Step 1: Contradiction Lineage Lookup (contradicted_by_id)
-    cand_map = {c.memory.id: c for c in candidates if hasattr(c.memory, "id")}
     active_mids = {
         c.memory.id
         for c in candidates
@@ -78,12 +68,12 @@ def resolve_conflicts(
         if is_contradicted or contradicted_by_id is not None:
             if not historical:
                 c.explanation.append(
-                    f"conflict_resolver: excluded superseded (superseded_by={contradicted_by_id})"
+                    f"conflict_resolver: excluded contradicted (contradicted_by={contradicted_by_id})"
                 )
                 continue
             else:
                 c.explanation.append(
-                    f"conflict_resolver: retained historical fact (superseded_by={contradicted_by_id})"
+                    f"conflict_resolver: retained contradicted fact for historical query (contradicted_by={contradicted_by_id})"
                 )
 
         if state == "archived" and not is_contradicted:
@@ -98,54 +88,97 @@ def resolve_conflicts(
     if not filtered_candidates:
         return []
 
-    # Step 2: Fact Domain Conflict Resolution (Same entity + attribute)
+    # Step 2: Fact Domain Conflict Resolution
+    # Facts compete per domain key: (entity, attribute) for single-valued
+    # attributes, (entity, attribute, value) for multi-valued ones, so
+    # coexisting preferences/devices are never collapsed into one.
+    superseded = superseded_ids or set()
     domain_map = {}
     resolved = []
 
     for c in filtered_candidates:
         mem = c.memory
-        parsed = parse_memory(mem.content)
-        fact = extract_fact(parsed)
+        fact = c.fact if c.fact is not None else extract_fact(parse_memory(mem.content))
+        c.fact = fact
 
-        if fact and fact.entity and fact.attribute:
-            key = (fact.entity.lower(), fact.attribute.lower())
-            mem_temporal = fact.temporal_state
-
-            if key in domain_map:
-                existing_c = domain_map[key]
-                existing_mem = existing_c.memory
-                existing_fact = extract_fact(parse_memory(existing_mem.content))
-                existing_temporal = existing_fact.temporal_state if existing_fact else "CURRENT"
-
-                if historical:
-                    # Historical query allows historical facts alongside current facts
-                    resolved.append(c)
-                elif future_intent:
-                    if mem_temporal == "FUTURE" and existing_temporal != "FUTURE":
-                        domain_map[key] = c
-                        c.explanation.append("conflict_resolver: preferred future fact")
-                    elif getattr(mem, "created_at", None) and getattr(existing_mem, "created_at", None):
-                        if mem.created_at > existing_mem.created_at:
-                            domain_map[key] = c
-                else:
-                    # Current query prefers CURRENT fact over HISTORICAL fact
-                    if mem_temporal == "CURRENT" and existing_temporal == "HISTORICAL":
-                        domain_map[key] = c
-                        c.explanation.append(f"conflict_resolver: preferred current fact ({fact.value})")
-                    elif getattr(mem, "contradicted_by_id", None) == existing_mem.id:
-                        pass # existing_mem supersedes mem
-                    elif getattr(existing_mem, "contradicted_by_id", None) == mem.id:
-                        domain_map[key] = c
-                    elif getattr(mem, "created_at", None) and getattr(existing_mem, "created_at", None):
-                        if mem.created_at > existing_mem.created_at:
-                            domain_map[key] = c
-            else:
-                domain_map[key] = c
-        else:
+        if not (fact and fact.entity and fact.attribute):
             resolved.append(c)
+            continue
+
+        c.temporal_state = effective_temporal_state(mem, fact, superseded)
+        if c.temporal_state != fact.temporal_state:
+            c.explanation.append(
+                f"conflict_resolver: effective temporal state {c.temporal_state} (superseded lineage)"
+            )
+
+        if historical:
+            # Historical queries keep every temporal version of the fact.
+            resolved.append(c)
+            continue
+
+        key = fact_domain_key(fact)
+        existing_c = domain_map.get(key)
+        if existing_c is None:
+            domain_map[key] = c
+            continue
+
+        intent = FUTURE if future_intent else CURRENT
+        if _prefers(c, existing_c, intent):
+            domain_map[key] = c
+            c.explanation.append(
+                f"conflict_resolver: preferred {c.temporal_state} fact for {intent} query ({fact.value})"
+            )
+            existing_c.explanation.append("conflict_resolver: excluded (lost domain conflict)")
+        else:
+            c.explanation.append("conflict_resolver: excluded (lost domain conflict)")
 
     for c in domain_map.values():
         if c not in resolved:
             resolved.append(c)
 
     return resolved
+
+
+# Preference order of effective temporal states per query temporal intent.
+# A CURRENT query never lets a plan (FUTURE) or superseded fact displace a
+# current fact; a FUTURE query prefers plans.
+_TEMPORAL_PRIORITY = {
+    CURRENT: {"CURRENT": 3, "UNKNOWN": 2, "HISTORICAL": 1, "FUTURE": 0},
+    FUTURE: {"FUTURE": 3, "CURRENT": 2, "UNKNOWN": 1, "HISTORICAL": 0},
+}
+
+
+def effective_temporal_state(memory, fact, superseded_ids: set[int]) -> str:
+    """Extracted temporal state, overridden to HISTORICAL by 'superseded_by' lineage."""
+    if getattr(memory, "id", None) in superseded_ids:
+        return "HISTORICAL"
+    return fact.temporal_state if fact else "UNKNOWN"
+
+
+def _prefers(new_c: ContextCandidate, old_c: ContextCandidate, intent: str) -> bool:
+    """True if new_c should replace old_c as the answer for its fact domain."""
+    priority = _TEMPORAL_PRIORITY[intent]
+    new_rank = priority.get(new_c.temporal_state, 1)
+    old_rank = priority.get(old_c.temporal_state, 1)
+    if new_rank != old_rank:
+        return new_rank > old_rank
+
+    new_mem, old_mem = new_c.memory, old_c.memory
+    # Explicit contradiction lineage
+    if getattr(new_mem, "contradicted_by_id", None) == getattr(old_mem, "id", None):
+        return False
+    if getattr(old_mem, "contradicted_by_id", None) == getattr(new_mem, "id", None):
+        return True
+
+    # Otherwise the most recently stated fact wins. Rows written in one
+    # transaction share created_at (Postgres now()), so fall back to the
+    # monotonic id to keep "most recent" deterministic.
+    new_created = getattr(new_mem, "created_at", None)
+    old_created = getattr(old_mem, "created_at", None)
+    if new_created and old_created and new_created != old_created:
+        return new_created > old_created
+    new_id = getattr(new_mem, "id", None)
+    old_id = getattr(old_mem, "id", None)
+    if new_id is not None and old_id is not None:
+        return new_id > old_id
+    return False

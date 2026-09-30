@@ -40,3 +40,22 @@
 - **Conservative Entity Resolution**: Distinguishes distinct entity instances (`Rahul Patel` vs `Rahul Sharma`).
 - **Temporal Query Handling**: Context Engine ranks candidate memories according to query temporal intent (`CURRENT`, `HISTORICAL`, `FUTURE`).
 - **116/116 Tests Passing**: Verified full test suite execution in 20.17 seconds.
+
+### v0.9 — Correctness, Query-Aware Context & Evaluation [COMPLETE]
+- **Evaluation framework** (`app/evaluation/`): P@1, Recall@k, MRR, nDCG,
+  lineage precision/recall, graph edge accuracy, duplicate suppression,
+  extraction and temporal accuracy, plus a regression gate.
+- **Correctness fixes** measured by the framework: word-boundary temporal cues,
+  decay never archives, re-assertion safety, attribute cardinality,
+  direct-object values, planned (FUTURE) facts, `used to` aspect.
+- **Query-aware context:** `QueryIntent`, lineage-aware temporal conflict
+  resolution, structured `ContextEvidence` in `ContextPackage`.
+- **Typed configuration** (`app/config.py`).
+- **149/149 tests passing.**
+
+## Next Milestones (proposed, see ARCHITECTURE_ASSESSMENT.md §5)
+1. Test database safety and Alembic migrations.
+2. First-class provenance (`memory_evidence`, `merged_into` lineage).
+3. Stored canonical facts with structural candidate lookup.
+4. Persisted, conservatively resolved entity graph; remove the keyword entity list.
+5. Temporal events and explicit uncertainty, driven by measured failures.

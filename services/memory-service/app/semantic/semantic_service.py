@@ -1,10 +1,11 @@
 from sentence_transformers import SentenceTransformer
 
+from app.config import settings
 from app.models import Memory
 
 print("Loading embedding model...")
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = SentenceTransformer(settings.embedding_model)
 
 print("Embedding model ready.")
 

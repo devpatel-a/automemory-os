@@ -106,6 +106,7 @@ class MemoryPipeline:
                                 ef
                                 and ef.entity.strip().lower() == norm_ent
                                 and ef.attribute.strip().lower() == norm_attr
+                                and ef.temporal_state != "FUTURE"
                             ):
                                 target_mem = cm
                                 break
@@ -120,6 +121,7 @@ class MemoryPipeline:
                                 ef
                                 and ef.entity.strip().lower() == norm_ent
                                 and ef.attribute.strip().lower() == norm_attr
+                                and ef.temporal_state != "FUTURE"
                             ):
                                 target_mem = cm
                                 break
@@ -146,7 +148,8 @@ class MemoryPipeline:
             elif decision.action == MemoryAction.ARCHIVE:
                 contradictory_cand = target_mem or get_memory_object(candidates[0])
                 memory = create_memory(content=content, category=category, db=self.db)
-                contradict_existing_memory(self.db, contradictory_cand, memory.id)
+                if getattr(contradictory_cand, "id", None) != memory.id:
+                    contradict_existing_memory(self.db, contradictory_cand, memory.id)
             else:
                 memory = create_memory(content=content, category=category, db=self.db)
 
@@ -183,7 +186,7 @@ class MemoryPipeline:
                         break
 
             memory = create_memory(content=content, category=category, db=self.db)
-            if contradictory_cand:
+            if contradictory_cand and getattr(contradictory_cand, "id", None) != memory.id:
                 contradict_existing_memory(self.db, contradictory_cand, memory.id)
 
         else:

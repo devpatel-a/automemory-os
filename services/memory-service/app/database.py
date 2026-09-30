@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "postgresql://devpatel@localhost/automemory_os"
+from .config import settings
+
+DATABASE_URL = settings.database_url
 
 
 class Base(DeclarativeBase):

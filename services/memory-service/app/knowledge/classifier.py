@@ -1,4 +1,6 @@
 from app.knowledge.knowledge_types import KnowledgeDecision
+from app.knowledge.temporal_cues import has_transition_evidence
+from app.knowledge.attribute_schema import is_single_valued
 from app.knowledge.fact_extractor import extract_fact
 from app.knowledge.contradiction_detector import detect_contradiction
 from app.understanding.memory_parser import parse_memory
@@ -104,12 +106,22 @@ def classify_knowledge(
                             if ex_value == norm_value:
                                 continue
 
+                            # Multi-valued attributes (preferences, devices, tools, ...)
+                            # hold several values at once: different values coexist.
+                            if not is_single_valued(new_fact):
+                                continue
+
                             # Rule E & F: Incoming FUTURE fact -> PRESERVE BOTH (NEW)
                             if incoming_temporal == "FUTURE":
                                 continue
 
+                            # A stored plan is not a current claim: never supersede
+                            # or contradict FUTURE facts with a different value.
+                            if existing_temporal == "FUTURE":
+                                continue
+
                             # Explicit transition evidence -> SUPERSESSION
-                            has_transition = any(tr in content_lower for tr in ("moved to", "moved", "changed to", "transferred to", "transferred", "now live", "now work", "relocated to", "relocated"))
+                            has_transition = has_transition_evidence(content_lower)
                             if has_transition:
                                 return KnowledgeDecision.SUPERSESSION
 
