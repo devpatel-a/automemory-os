@@ -21,6 +21,7 @@ from app.database import Base, engine as app_engine
 from app.testing_support import assert_test_database, run_migrations
 import app.models  # noqa: F401
 import app.models_relationship  # noqa: F401
+import app.graph.db_models  # noqa: F401
 
 
 @pytest.fixture

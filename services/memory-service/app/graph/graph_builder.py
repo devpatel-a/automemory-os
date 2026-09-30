@@ -7,6 +7,8 @@ from app.graph.relationship_detector import (
     detect_relationships,
 )
 
+from app.understanding.entity_normalizer import normalize_entity_name
+
 
 def build_graph(
     parsed_memory,
@@ -22,9 +24,9 @@ def build_graph(
 
     for entity in parsed_memory.entities:
 
-        node_id = entity.text.lower()
+        node_id = normalize_entity_name(entity.text)
 
-        if node_id in seen:
+        if not node_id or node_id in seen:
             continue
 
         seen.add(node_id)

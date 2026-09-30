@@ -1,8 +1,6 @@
 from app.semantic.semantic_service import generate_embedding, semantic_search
 from app.ranking_service import compute_hybrid_rank_score, STOP_WORDS
-from app.graph.graph_service import GraphService
-from app.graph.graph_search import GraphSearch
-from app.context.query_entities import extract_query_entities
+from app.graph.sql_repository import SqlGraphRepository
 from app.models import Memory
 
 
@@ -76,28 +74,9 @@ def retrieve_memories(
                 if mid in candidate_map:
                     candidate_map[mid]["keyword_matched"] = True
 
-    # 3. Knowledge Graph Expansion (Robust entity & term matching)
-    graph_service = GraphService()
-    kg = graph_service.repository.load()
-    graph_search = GraphSearch(nodes=kg.nodes, edges=kg.edges)
-
-    query_entities = extract_query_entities(query)
-    graph_terms = set()
-    for entity in query_entities:
-        ent_text = entity.text if hasattr(entity, "text") else str(entity)
-        if ent_text and ent_text.strip():
-            graph_terms.add(ent_text.strip().lower())
-
-    # Include non-stopword query terms for robust graph candidate discovery
-    for raw_term in query.split():
-        clean_term = raw_term.strip(".,!?\"'").lower()
-        if clean_term and clean_term not in STOP_WORDS and len(clean_term) > 1:
-            graph_terms.add(clean_term)
-
-    graph_mids = set()
-    for term in graph_terms:
-        matched = graph_search.memory_ids(term)
-        graph_mids.update(matched)
+    # 3. Knowledge Graph Expansion (persistent graph, conservative entity resolution:
+    #    exact normalized names / explicit aliases, longest span first)
+    graph_mids = SqlGraphRepository(db).memory_ids_for_query(query)
 
     for mid in graph_mids:
         if mid in candidate_map:

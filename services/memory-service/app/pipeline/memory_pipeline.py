@@ -81,7 +81,7 @@ class MemoryPipeline:
 
     def __init__(self, db: Session):
         self.db = db
-        self.graph_service = GraphService()
+        self.graph_service = GraphService(db)
         self._handlers = {
             KnowledgeDecision.NEW: self._store,
             KnowledgeDecision.RELATED: self._store,
@@ -122,7 +122,7 @@ class MemoryPipeline:
         memory = evolution.memory
         self.db.refresh(memory)
 
-        # 6. Knowledge Graph
+        # 6b. Process-local graph view (compatibility; PostgreSQL is the source of truth)
         graph = self.graph_service.process_memory(
             parsed_memory=parsed_memory,
             memory_id=memory.id,
@@ -162,6 +162,9 @@ class MemoryPipeline:
             target=target,
         )
         evolution.reason_codes = list(knowledge.reason_codes) + evolution.reason_codes
+
+        # 6a. Persistent knowledge graph, in the same transaction as the evolution
+        self.graph_service.persist_memory(parsed_memory, evolution.memory.id)
         return knowledge, decision, evolution
 
     # -------------------------------------------------------------- handlers
