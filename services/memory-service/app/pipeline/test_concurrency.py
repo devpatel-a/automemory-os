@@ -56,10 +56,12 @@ def all_memories():
 
 def test_same_memory_inserted_concurrently_yields_one_record():
     reset_database()
-    run_concurrently("I live in Pune.", "I live in Pune.", "I live in Pune.")
+    run_concurrently(*["I live in Pune."] * 5)
     rows = [m for m in all_memories() if m.content == "I live in Pune."]
     assert len(rows) == 1
-    assert rows[0].access_count == 2  # created once, reinforced twice
+    # created once, reinforced four times: no lost updates between the
+    # create_memory exact-match path and the pipeline reinforcement path
+    assert rows[0].access_count == 4
 
 
 def test_same_fact_contradicted_concurrently_stays_consistent():
@@ -134,3 +136,50 @@ def test_same_relationship_created_concurrently_is_stored_once():
     assert not errors, errors
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM memory_relationships")).scalar() == 1
+
+
+def test_exact_match_reinforcement_waits_for_concurrent_row_update():
+    """Deterministic lost-update check: while one transaction holds the row
+    lock and has incremented access_count, create_memory() for the same text
+    must wait and then build on the committed value (not a stale read)."""
+    import time
+
+    from app.service import create_memory, lock_memory
+
+    reset_database()
+    setup = SessionLocal()
+    memory = Memory(content="I live in Pune.", category="profile", state="active", access_count=0)
+    setup.add(memory)
+    setup.commit()
+    memory_id = memory.id
+    setup.close()
+
+    holder = SessionLocal()
+    locked = lock_memory(holder, holder.get(Memory, memory_id))
+    locked.access_count += 1
+    holder.flush()  # uncommitted increment, row lock held
+
+    errors = []
+
+    def concurrent_reinforce():
+        session = SessionLocal()
+        try:
+            create_memory("I live in Pune.", "profile", db=session)
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            session.close()
+
+    worker = threading.Thread(target=concurrent_reinforce)
+    worker.start()
+    time.sleep(1.0)  # let the worker reach the row lock
+    holder.commit()
+    holder.close()
+    worker.join(timeout=60)
+
+    assert not errors, errors
+    check = SessionLocal()
+    try:
+        assert check.get(Memory, memory_id).access_count == 2
+    finally:
+        check.close()

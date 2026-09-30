@@ -130,6 +130,10 @@ def create_memory(
                 ~historical_link,
             )
             .order_by((Memory.state == "archived").asc(), Memory.id.asc())
+            # Row lock: other paths (pipeline reinforcement) update this row
+            # under FOR UPDATE; a plain read here would lose their updates.
+            .with_for_update(of=Memory)
+            .populate_existing()
             .first()
         )
 
@@ -172,6 +176,7 @@ def create_memory(
         duplicate = find_duplicate(candidates)
 
         if duplicate:
+            duplicate = lock_memory(db_session, duplicate)
             strengthen_memory(duplicate)
             update_memory_state(duplicate)
             decay_memory(duplicate)
