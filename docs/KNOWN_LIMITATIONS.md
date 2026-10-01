@@ -50,6 +50,14 @@ AutoMemory OS intentionally relies on deterministic NLP algorithms, explicit dep
   neighbours (plus a 50-candidate wide search only to resolve a contradiction
   target). A conflicting same-attribute fact outside that pool is missed.
   A stored `knowledge_facts` table with an `(entity, attribute)` index is the fix.
+  **Status:** the `knowledge_facts` table now exists as a **shadow index**. It is
+  derived from `memories.content`, rebuildable
+  (`python -m app.knowledge.fact_index reindex`), kept in sync in the same
+  transaction as pipeline writes and admin edits, and removed on purge. It is
+  **not yet authoritative**: evolution, classification and retrieval do not
+  read it, so the top-5 limitation still applies. The next stage will
+  evaluate it for structural candidate lookup, after fixing the extraction
+  defects listed in `docs/design/KNOWLEDGE_FACTS_INDEX.md` §2.1.
 - **Entity identity by name:** two different people who share exactly the same
   name are one entity until an alias/disambiguation mechanism exists
   (resolution never merges *different* names).

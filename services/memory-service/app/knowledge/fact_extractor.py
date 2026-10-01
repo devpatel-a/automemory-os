@@ -70,6 +70,21 @@ NOUN_ATTRIBUTE_MAP = {
 }
 
 
+# Extractor markers (named so derived consumers reuse, not re-invent, them):
+# - a value that only refers to something ("I live there", "I like it") is a
+#   placeholder; a missing value is filled with MISSING_VALUE;
+# - NO_ATTRIBUTE is emitted when no attribute could be identified.
+PLACEHOLDER_VALUES = ("this", "that", "it", "something", "anything")
+MISSING_VALUE = "unknown"
+NO_ATTRIBUTE = "general"
+
+
+def is_placeholder_value(value: str | None) -> bool:
+    """True for values produced by the extractor's placeholder branch."""
+    v = (value or "").strip().lower()
+    return not v or v == MISSING_VALUE or v in PLACEHOLDER_VALUES
+
+
 EMPLOYMENT_PREPOSITIONS = {"at", "for"}
 
 
@@ -234,12 +249,12 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
     else:
         value = val_tokens[-1].strip() if val_tokens else ""
 
-    if not value or value.lower() in ("this", "that", "it", "something", "anything"):
+    if not value or value.lower() in PLACEHOLDER_VALUES:
         if attribute:
             return KnowledgeFact(
                 entity=entity,
                 attribute=attribute,
-                value=value or "unknown",
+                value=value or MISSING_VALUE,
                 fact_type=fact_type,
                 temporal_info="current",
                 temporal_state="CURRENT",
@@ -280,7 +295,7 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
 
     return KnowledgeFact(
         entity=entity,
-        attribute=attribute or "general",
+        attribute=attribute or NO_ATTRIBUTE,
         value=value,
         fact_type=fact_type,
         temporal_info=temporal_info,

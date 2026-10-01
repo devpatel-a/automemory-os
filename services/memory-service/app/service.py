@@ -326,6 +326,7 @@ def update_memory(
     """
     from .graph.graph_service import GraphService
     from .knowledge.fact_extractor import extract_fact
+    from .knowledge.fact_index import sync_memory_fact
     from .understanding.memory_parser import parse_memory
 
     db_session = db if db is not None else SessionLocal()
@@ -350,6 +351,9 @@ def update_memory(
         memory.last_accessed = datetime.now(UTC)
         bump_version(memory)
         db_session.flush()
+
+        # Shadow fact index follows the new content, in this transaction.
+        sync_memory_fact(db_session, memory)
 
         graph = GraphService(db_session)
         graph.sql.unlink_memory(memory.id)

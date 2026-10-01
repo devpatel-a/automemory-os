@@ -36,9 +36,26 @@ data. `python -m app.init_db` is equivalent to `alembic upgrade head`.
 | `0003_knowledge_graph` | `entities`, `entity_aliases`, `memory_entities`, `entity_relationships` |
 | `0004_memory_evidence` | provenance (`memory_evidence`), legacy rows backfilled as `source_type='legacy'` |
 | `0005_memory_version` | `memories.version` (optimistic concurrency, existing rows = 1), `memory_evidence.previous_text` |
+| `0006_knowledge_facts` | `knowledge_facts` shadow index (schema only; populate with `reindex`, below) |
 
 Rollback: `alembic downgrade -1` (each revision has a downgrade; downgrading
 0003/0004 drops graph/provenance data).
+
+### Structural fact index (`knowledge_facts`)
+
+The index is derived from `memories.content` and is not yet used for
+decisions. New and edited memories are indexed automatically. Existing
+databases need an explicit backfill after `alembic upgrade head`; the
+migration does not run the NLP model:
+
+```bash
+python -m app.knowledge.fact_index reindex        # missing/stale rows; idempotent, resumable
+python -m app.knowledge.fact_index reindex --all  # recompute every row
+python -m app.knowledge.fact_index check          # read-only audit; exit 1 if inconsistent
+```
+
+`reindex` is safe while the service runs: it skips rows locked by live writes
+and never modifies memories, evidence, lineage or graph data.
 
 ## Configuration
 

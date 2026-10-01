@@ -22,6 +22,7 @@ import app.models  # noqa: F401
 import app.models_relationship  # noqa: F401
 import app.graph.db_models  # noqa: F401
 import app.provenance.models  # noqa: F401
+import app.knowledge.fact_index_model  # noqa: F401
 
 
 @pytest.fixture
@@ -154,4 +155,7 @@ def test_legacy_create_all_database_upgrades_without_data_loss(scratch_engine):
         # 0005: optimistic version starts at 1 for existing rows; no previous text invented
         assert conn.execute(text("SELECT array_agg(DISTINCT version) FROM memories")).scalar() == [1]
         assert conn.execute(text("SELECT count(*) FROM memory_evidence WHERE previous_text IS NOT NULL")).scalar() == 0
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0005_memory_version"
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0006_knowledge_facts"
+        # 0006 is schema-only: no facts are derived inside the migration (no NLP
+        # in Alembic); existing memories get rows only via the explicit reindex.
+        assert conn.execute(text("SELECT count(*) FROM knowledge_facts")).scalar() == 0
