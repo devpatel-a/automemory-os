@@ -20,6 +20,7 @@ from app.service import (
 from app import lineage
 from app.lineage import historical_memory_ids
 from app.knowledge.fact_extractor import extract_fact
+from app.knowledge.fact_index import sync_memory_fact
 from app.models import Memory
 from app.semantic.semantic_service import generate_embedding, semantic_search
 from app.understanding.memory_parser import parse_memory
@@ -195,6 +196,11 @@ class MemoryPipeline:
         evolution.reason_codes += self._link_fulfilled_plans(
             evolution.memory, knowledge.fact, candidates, historical,
         )
+
+        # Shadow fact index (derived from evolution.memory's current content), in
+        # the same transaction. Every handler returns the memory whose content
+        # it wrote; other touched memories keep their content. Not read here.
+        sync_memory_fact(self.db, evolution.memory)
 
         # Provenance: append-only evidence for the memory this statement produced/affected
         self._record_evidence(evolution, knowledge, content, provenance)

@@ -1,6 +1,8 @@
 # Design: `knowledge_facts` structural fact index
 
-Status: **proposal** (no code changes). Baseline: `main` @ `a1d5aaa` (v0.10.1).
+Status: **PR-1 implemented** (shadow index: written and checked, not read by
+evolution). PR-2/PR-3 remain proposals. Baseline of the design: `main` @
+`a1d5aaa` (v0.10.1). See §16 for what PR-1 implemented.
 Scope: fix the documented evolution candidate-pool limitation
 (`KNOWN_LIMITATIONS.md`, "Evolution candidate pool") and nothing else.
 
@@ -504,3 +506,31 @@ Acceptance criteria:
 - the backfill is idempotent;
 - the checker on the test database reports zero missing or stale rows after
   the backfill.
+
+---
+
+## 16. PR-1 as implemented
+
+- Schema: `alembic/versions/0006_knowledge_facts.py` and
+  `app/knowledge/fact_index_model.py`, exactly as §3/§5.
+- Derivation and sync: `app/knowledge/fact_index.py`
+  (`derive_fact_row`, `sync_memory_fact`). Two call sites, each inside the
+  existing transaction: `MemoryPipeline._evolve` (for `evolution.memory`,
+  after the handler) and `service.update_memory` (admin PUT). Purge relies on
+  `ON DELETE CASCADE`.
+- Backfill and rebuild: `python -m app.knowledge.fact_index reindex [--all]`
+  and `... check`. The migration is schema-only; no NLP runs inside Alembic.
+- Clarifications made while implementing, none of them new semantics:
+  - The extractor's own markers are now named constants in
+    `fact_extractor.py` (`PLACEHOLDER_VALUES`, `MISSING_VALUE`,
+    `NO_ATTRIBUTE`). Extraction behaviour is unchanged.
+  - The `NO_ATTRIBUTE` marker (`"general"`) counts as "no attribute", so such
+    memories get no row.
+  - If a derived key would exceed its column length, the memory gets no row.
+    Keys are never truncated, and the rule is deterministic, so rebuilds give
+    identical results.
+  - `lookup_fact_rows` (tests and the next stage only) excludes placeholder
+    rows unless explicitly asked.
+- Not consulted: tests assert the pipeline only INSERTs/DELETEs
+  `knowledge_facts`, and that decisions are identical with a clean, an empty
+  and a deliberately poisoned index.

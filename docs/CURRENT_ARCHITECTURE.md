@@ -130,3 +130,13 @@ A historical fact (`temporal_state = "HISTORICAL"`) remains in an `active` `Memo
   contradiction on the memory row (`contradicted_by_id`, FK).
 - **Startup validation:** spaCy model, embedding dimension vs. `vector(384)`, database.
 - See `ARCHITECTURE_ASSESSMENT.md` §7 for the v0.10 record.
+
+---
+
+## v0.11 (in progress): `knowledge_facts` shadow index
+
+A derived, rebuildable index of each memory's structured fact (`knowledge_facts`,
+migration 0006). `memories.content` remains the source of truth. Lifecycle and
+lineage are not copied into the index. It is written in the same transaction
+as content changes, but **not yet used** by evolution, classification or
+retrieval. Design: `docs/design/KNOWLEDGE_FACTS_INDEX.md`.
