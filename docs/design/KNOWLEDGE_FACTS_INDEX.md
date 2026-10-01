@@ -118,7 +118,14 @@ plan fulfilment and same-value reinforcement/merge.
 | "My parents live near Pune." | `(user, residence, Pune)` | Possessive subjects not in `RELATION_NOUNS` collapse to `user`, attributing third-party facts to the user. |
 | "I live there." | `(user, residence, "unknown", conf 0.35)` | The placeholder value is treated as a real value. **Today**, "I live there." archived "I live in Pune." as contradicted. |
 
-Today both are limited to the semantic neighbourhood. A global
+**Status (Section 1, §17):** the parents case is fixed in the extractor
+(entity `parents`). Placeholders, pronoun subjects/values and questions are
+now *flagged* (`is_placeholder`, `is_question`); the classifier does not read
+those flags yet, so "I live there." still contradicts "I live in Pune." in
+evolution.
+
+Before the index existed, both defects were limited to the semantic
+neighbourhood. A global
 `(entity, attribute)` lookup would make them **guaranteed** across the whole
 store. They must be fixed, or explicitly excluded from conflict participation,
 **before** the index is allowed to influence decisions (§12).
@@ -140,7 +147,7 @@ knowledge_facts
   single_valued      BOOLEAN NOT NULL        -- is_single_valued(fact) at extraction time
   temporal_state     VARCHAR(16)  NOT NULL   -- EXTRACTED state, never the effective one
   is_negated         BOOLEAN NOT NULL
-  is_placeholder     BOOLEAN NOT NULL        -- value was a placeholder ("unknown", "this", ...)
+  is_placeholder     BOOLEAN NOT NULL        -- KnowledgeFact.is_placeholder (placeholder/pronoun value or pronoun subject)
   confidence         DOUBLE PRECISION NOT NULL
   content_sha256     CHAR(64) NOT NULL       -- hash of memories.content the row was derived from
   extractor_version  VARCHAR(32) NOT NULL    -- provenance.models.EXTRACTOR_VERSION
@@ -319,7 +326,8 @@ semantic or lexical by design:
 - **Future plans** are stored with `temporal_state = 'FUTURE'`. The classifier
   already never contradicts or supersedes them. Fulfilment uses the
   `(entity, attribute, value)` lookup filtered to `FUTURE`.
-- **Placeholders** ("unknown", "this", "it", ...) are stored with
+- **Placeholders** ("unknown", "this", "it", pronoun values such as "them",
+  pronoun subjects such as "We"/"He") are stored with
   `is_placeholder = true`, but **excluded from structural lookup** on both
   sides. PR-2 must additionally stop placeholder facts from contradicting real
   values (§2.1), independent of the index.
@@ -534,3 +542,28 @@ Acceptance criteria:
 - Not consulted: tests assert the pipeline only INSERTs/DELETEs
   `knowledge_facts`, and that decisions are identical with a clean, an empty
   and a deliberately poisoned index.
+
+---
+
+## 17. Section 1: extraction hardening
+
+Extractor fixes only. The classifier, candidate selection and the rule that
+the index is not consulted are unchanged. `EXTRACTOR_VERSION` is now
+`deterministic-nlp-0.11`, so `check` reports rows written by the previous
+version as stale, and `reindex` refreshes them.
+
+| Input | Before | After |
+| :--- | :--- | :--- |
+| "My parents live near Pune." (also "My team/kids/laptop ...") | entity `user` | entity `parents` (the possessed subject). Copular "My name is ..." and relation nouns are unchanged. |
+| "I live there." / "I like it." | flagged by value text | `KnowledgeFact.is_placeholder = true` |
+| "I like them." / "Thank you." | real row | `is_placeholder = true` (pronoun value) |
+| "We/He live(s) in Pune." / "That sounds good." | real row, entity "We"/"He"/"That" | `is_placeholder = true` (non-user pronoun subject) |
+| "Do I live in Pune?" | real CURRENT row | `KnowledgeFact.is_question = true`; no index row |
+
+Values, attributes and confidences are unchanged; the flags are additive.
+Query analysis still extracts facts from questions.
+
+Still open, since each needs classifier decision logic (out of scope here):
+placeholder facts can still contradict or supersede real values; a question
+can still MERGE into the matching statement and rewrite its text; a pronoun
+subject ("We live in Pune.") can still reinforce the user's fact.

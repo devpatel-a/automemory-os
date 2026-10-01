@@ -16,6 +16,12 @@ class KnowledgeFact(BaseModel):
     temporal_state: str = "CURRENT"  # CURRENT, HISTORICAL, FUTURE, UNKNOWN
     relationship_to_user: str | None = None  # e.g., friend, brother, colleague
     is_negated: bool = False
+    # Extraction-quality flags (consumed by the knowledge_facts index only):
+    # - is_placeholder: the entity or value only refers to something stated
+    #   elsewhere ("I live there.", "I like them.", "We live in Pune.");
+    # - is_question: the text asks rather than states ("Do I live in Pune?").
+    is_placeholder: bool = False
+    is_question: bool = False
 
     confidence: float = 0.60
     evidence_count: int = 1

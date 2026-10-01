@@ -74,15 +74,10 @@ NOUN_ATTRIBUTE_MAP = {
 # - a value that only refers to something ("I live there", "I like it") is a
 #   placeholder; a missing value is filled with MISSING_VALUE;
 # - NO_ATTRIBUTE is emitted when no attribute could be identified.
+# Placeholder facts are flagged KnowledgeFact.is_placeholder.
 PLACEHOLDER_VALUES = ("this", "that", "it", "something", "anything")
 MISSING_VALUE = "unknown"
 NO_ATTRIBUTE = "general"
-
-
-def is_placeholder_value(value: str | None) -> bool:
-    """True for values produced by the extractor's placeholder branch."""
-    v = (value or "").strip().lower()
-    return not v or v == MISSING_VALUE or v in PLACEHOLDER_VALUES
 
 
 EMPLOYMENT_PREPOSITIONS = {"at", "for"}
@@ -170,10 +165,24 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         elif possessive_my:
             if subj_token.lemma_.lower() in RELATION_NOUNS:
                 entity = subj_token.text
-            else:
+            elif subj_token.lower_ in USER_PRONOUNS or (verb_token is not None and verb_token.lemma_ == "be"):
+                # "I love my dog", "My name is Dev": a fact about the user.
                 entity = "user"
+            else:
+                # "My parents live near Pune", "My laptop runs Linux": the
+                # possessed noun is the subject, not the user.
+                entity = subj_token.text
         elif subj_token.lower_ not in USER_PRONOUNS:
             entity = subj_token.text
+
+    # A non-user pronoun subject ("We", "He", "That", "you") only refers to
+    # an entity named elsewhere; its fact is a placeholder.
+    placeholder_subject = (
+        subj_token is not None
+        and subj_token.pos_ == "PRON"
+        and subj_token.lower_ not in USER_PRONOUNS
+    )
+    is_question = raw_text.endswith("?")
 
     # 2. Attribute & Fact Type Extraction via Centralized Linguistic Normalization
     attribute = None
@@ -258,9 +267,17 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
                 fact_type=fact_type,
                 temporal_info="current",
                 temporal_state="CURRENT",
+                is_placeholder=True,
+                is_question=is_question,
                 confidence=0.35,
             )
         return None
+
+    # A pronoun value ("I like them", "Thank you") refers to something stated
+    # elsewhere, like the PLACEHOLDER_VALUES above.
+    placeholder_value = len(value.split()) == 1 and any(
+        t.pos_ == "PRON" and t.text == value for t in doc
+    )
 
     # 4. Negation & Temporal State Classification
     is_negated = any(t.dep_ == "neg" or t.lower_ in ("not", "no", "never", "anymore") for t in doc)
@@ -302,5 +319,7 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         temporal_state=temporal_state,
         relationship_to_user=relationship_to_user,
         is_negated=is_negated,
+        is_placeholder=placeholder_subject or placeholder_value,
+        is_question=is_question,
         confidence=confidence,
     )

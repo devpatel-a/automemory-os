@@ -27,7 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.knowledge.attribute_schema import is_single_valued
-from app.knowledge.fact_extractor import NO_ATTRIBUTE, extract_fact, is_placeholder_value
+from app.knowledge.fact_extractor import NO_ATTRIBUTE, extract_fact
 from app.knowledge.fact_index_model import KnowledgeFactRow
 from app.models import Memory
 from app.provenance.models import EXTRACTOR_VERSION
@@ -50,13 +50,14 @@ def derive_fact_row(content: str) -> dict | None:
     Row values derived from memory text, or None when there is no usable fact:
     - extract_fact() found nothing, or
     - it found no attribute (the extractor's NO_ATTRIBUTE marker), or
+    - the text is a question ("Do I live in Pune?" states nothing), or
     - a key would exceed its column (never truncated: no row, deterministically).
 
-    Placeholder facts ("I live there.") ARE stored, flagged is_placeholder,
-    and excluded from lookups.
+    Placeholder facts ("I live there.", "I like them.", "We live in Pune.")
+    ARE stored, flagged is_placeholder, and excluded from lookups.
     """
     fact = extract_fact(parse_memory(content)) if content and content.strip() else None
-    if fact is None or not fact.attribute or fact.attribute == NO_ATTRIBUTE:
+    if fact is None or not fact.attribute or fact.attribute == NO_ATTRIBUTE or fact.is_question:
         return None
 
     row = {
@@ -68,7 +69,7 @@ def derive_fact_row(content: str) -> dict | None:
         "single_valued": is_single_valued(fact),
         "temporal_state": fact.temporal_state,
         "is_negated": fact.is_negated,
-        "is_placeholder": is_placeholder_value(fact.value),
+        "is_placeholder": fact.is_placeholder,
         "confidence": fact.confidence,
         "content_sha256": content_sha256(content),
         "extractor_version": EXTRACTOR_VERSION,
