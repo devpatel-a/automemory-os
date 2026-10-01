@@ -62,3 +62,65 @@ Memory Evolution governs how new natural language facts interact with existing m
 ### Lifecycle
 - Decay demotes to `weak` and never archives.
 - Access counting never moves a memory out of `archived`.
+
+---
+
+## v0.10: Deterministic, Atomic Evolution
+
+### Execution
+The classifier (`assess_knowledge`) returns the decision **and** the exact target
+memory and reason codes. The pipeline executes exactly one handler per decision:
+
+| Decision | Handler |
+| :--- | :--- |
+| `NEW`, `RELATED` | store |
+| `REINFORCEMENT` | reinforce the target (row-locked) |
+| `UPDATE` | update the target in place |
+| `SUPERSESSION` | new memory; target stays `active`, linked `superseded_by` |
+| `MERGE` | canonical memory keeps the earliest timestamp; duplicates archived and linked `merged_into` |
+| `CONTRADICTION` | create the incoming memory; archive the target; `contradicted_by_id` = new id (never self); an exact re-assertion reactivates the earlier memory |
+
+If a contradiction target is missing, a wider search resolves it; if it still
+cannot be resolved, the incoming claim is stored and nothing unrelated is archived
+(reason code `contradiction_target_unresolved`).
+
+### Atomicity and concurrency
+One transaction per statement: memory, lineage, graph and evidence commit or roll
+back together. Targets are locked (`SELECT ... FOR UPDATE`) and re-verified; a
+concurrently changed target triggers a retry from fresh state (up to 3 attempts).
+Identical concurrent statements are serialized by a per-statement advisory lock.
+Lineage rows are idempotent (unique constraint + `ON CONFLICT DO NOTHING`).
+
+### Plans
+A current fact matching a stored FUTURE plan (same entity/attribute/value) links
+`plan --fulfilled_by--> fact`. The plan stays stored, is effectively HISTORICAL,
+and never answers future questions. Plans and their completions are never merged.
+Time passing alone never changes a plan.
+
+### Reason codes
+Deterministic, machine-readable (`same_entity`, `same_attribute`, `different_value`,
+`single_valued_attribute`, `transition_detected`, `historical_to_current`,
+`conflicting_current_claims`, `negation_detected`, `exact_content_match`,
+`equivalent_fact`, `fulfilled_plan:<id>`, ...), returned by the pipeline, stored in
+evidence and exposed by `/pipeline/process` and `GET /memory/{id}/evidence`.
+
+---
+
+## v0.10.1: Stale-Classification Protection
+
+- **Fact-domain serialization:** the pipeline takes a transaction-scoped advisory
+  lock on `(entity, attribute)` before classifying, so two statements about the
+  same domain are classified and written one after the other (previously two
+  conflicting residences could both be stored as NEW).
+- **Optimistic version:** `memories.version` is bumped by every semantic mutation
+  (contradiction, supersession, merge, reactivation, fulfilled-plan link, archive,
+  admin edit). After `SELECT ... FOR UPDATE`, each target's version must equal the
+  version seen at classification, the target must still be live and not
+  historical; otherwise the evolution rolls back and is reclassified from fresh
+  state (at most 3 attempts; deadlock/serialization failures are retried the same
+  way). Counter-only changes (reinforcement, reflection) do not bump the version.
+- **Counters:** reflection uses atomic in-database increments; opt-in
+  `record_access` listing locks rows.
+- **Admin mutations:** `PUT` (correction) and `DELETE` (archive / explicit purge)
+  are administrative operations with the same locking, version and provenance
+  guarantees; see `services/memory-service/README.md`.

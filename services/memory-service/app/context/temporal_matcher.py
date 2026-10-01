@@ -1,3 +1,5 @@
+from app.knowledge.temporal_cues import contains_cue
+
 TEMPORAL_MATCH_WEIGHT = 0.15
 
 
@@ -26,15 +28,12 @@ def temporal_match_score(
     the query.
     """
 
-    query = query.lower()
-
-    memory = memory_content.lower()
-
     score = 0.0
 
     for word in TEMPORAL_WORDS:
 
-        if word in query and word in memory:
+        # Whole words only ("last" must not match "lastly").
+        if contains_cue(query, [word]) and contains_cue(memory_content, [word]):
             score += TEMPORAL_MATCH_WEIGHT
 
     return score

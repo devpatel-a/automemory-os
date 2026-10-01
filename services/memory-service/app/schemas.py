@@ -6,10 +6,19 @@ from pydantic import BaseModel, ConfigDict
 class MemoryCreate(BaseModel):
     content: str
     category: str
+    # Optional provenance (additive; defaults keep the previous request shape valid)
+    source_type: str = "api"
+    conversation_id: str | None = None
+    message_id: str | None = None
+    observed_at: datetime | None = None
 
 
 class MemoryUpdate(BaseModel):
+    """Administrative correction of a memory's text (not a knowledge-evolution event)."""
+
     content: str
+    # Optimistic concurrency: reject with 409 if the memory changed since it was read.
+    expected_version: int | None = None
 
 
 class MemoryResponse(BaseModel):
@@ -21,6 +30,7 @@ class MemoryResponse(BaseModel):
     state: str
     confidence: float = 1.0
     is_contradicted: bool = False
+    version: int = 1
     created_at: datetime
     last_accessed: datetime
 
@@ -38,3 +48,35 @@ class AgentQueryResponse(BaseModel):
     response: str
     memories_used: list[MemoryResponse]
     reflection: dict | None = None
+
+
+class EvidenceResponse(BaseModel):
+    id: int
+    source_type: str
+    conversation_id: str | None = None
+    message_id: str | None = None
+    observed_at: datetime
+    extraction_method: str | None = None
+    extractor_version: str | None = None
+    confidence: float | None = None
+    raw_text: str | None = None
+    decision: str | None = None
+    reason_codes: list[str] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LineageLink(BaseModel):
+    relationship_type: str
+    memory_id: int
+    content: str
+
+
+class MemoryEvidenceResponse(BaseModel):
+    """Why AutoMemory believes a memory: its evidence and its lineage."""
+
+    memory: MemoryResponse
+    evidence: list[EvidenceResponse]
+    outgoing: list[LineageLink]       # e.g. superseded_by / merged_into / fulfilled_by
+    incoming: list[LineageLink]       # e.g. memories this one superseded or absorbed
+    contradicted_by: LineageLink | None = None

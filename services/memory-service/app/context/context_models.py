@@ -26,6 +26,9 @@ class ContextEvidence(BaseModel):
     confidence: float | None = None
     score: float = 0.0
     reasons: list[str] = Field(default_factory=list)
+    # Independently measured signals (semantic, lexical, graph, entity,
+    # attribute, temporal, ..., final); None = not measured.
+    signals: dict[str, float | None] = Field(default_factory=dict)
 
 
 class ContextPackage(BaseModel):

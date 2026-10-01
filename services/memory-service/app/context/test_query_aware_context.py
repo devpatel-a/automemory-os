@@ -1,22 +1,17 @@
+from app.testing_support import reset_database
 """
 Query-aware, lineage-aware context selection and structured evidence.
 """
 
-from sqlalchemy import text
 
-from app.database import SessionLocal, engine
-from app.graph.repository import reset_shared_graph
+from app.database import SessionLocal
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.context.context_engine import ContextEngine
 from app.context.query_intent import analyze_query
 
 
 def clear_db():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
-    reset_shared_graph()
+    reset_database()
 
 
 def ingest(db, statements, category="profile"):

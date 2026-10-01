@@ -1,3 +1,4 @@
+from app.understanding.entity_normalizer import normalize_entity_name
 from app.graph.graph_models import (
     GraphNode,
     GraphEdge,
@@ -22,20 +23,19 @@ class GraphSearch:
         keyword: str,
     ) -> list[GraphNode]:
         """
-        Return graph nodes matching a keyword.
+        Return graph nodes whose identity equals the keyword.
+
+        Exact normalized-name matching only: "rahul" must not match
+        "Rahul Patel" or "Rahul Sharma" (no substring identity).
         """
 
-        keyword = keyword.lower()
+        key = normalize_entity_name(keyword)
 
-        matches = []
-
-        for node in self.nodes:
-
-            if keyword in node.label.lower():
-
-                matches.append(node)
-
-        return matches
+        return [
+            node for node in self.nodes
+            if normalize_entity_name(node.id) == key
+            or normalize_entity_name(node.label) == key
+        ]
 
     def memory_ids(
         self,

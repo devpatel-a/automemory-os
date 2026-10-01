@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import Memory
 from app.knowledge.fact_models import KnowledgeFact
+from app.retrieval_models import RetrievalCandidate
 
 
 class ContextCandidate(BaseModel):
@@ -33,3 +34,6 @@ class ContextCandidate(BaseModel):
     # Effective temporal state: the extracted fact state, overridden to
     # HISTORICAL when the memory has a 'superseded_by' lineage link.
     temporal_state: str | None = None
+
+    # Structured retrieval signals for this memory (None for hand-built candidates)
+    retrieval: RetrievalCandidate | None = None

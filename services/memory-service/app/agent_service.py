@@ -4,7 +4,7 @@ from app.context.context_engine import ContextEngine
 from app.context.prompt_builder import build_prompt
 from app.reflection_service import ReflectionEngine
 from app.pipeline.memory_pipeline import MemoryPipeline
-from app.retrieval_service import retrieve_memories
+from app.models import Memory
 
 
 class MemoryAgent:
@@ -22,22 +22,19 @@ class MemoryAgent:
         self.memory_pipeline = MemoryPipeline(db)
 
     def query(self, user_query: str, top_k: int = 5) -> dict:
-        # 1. Build Context
+        # 1. Build the final context: this is the ONLY selection of evidence.
         context_package = self.context_engine.build_context(
-            db=self.db,
-            query=user_query,
-        )
-
-        # 2. Build Prompt
-        prompt = build_prompt(context_package)
-
-        # 3. Retrieve raw memories used
-        retrieved = retrieve_memories(
             db=self.db,
             query=user_query,
             limit=top_k,
         )
-        memories_used = [m for m, _ in retrieved]
+
+        # 2. Build Prompt from that context
+        prompt = build_prompt(context_package)
+
+        # 3. The memories used are exactly the evidence in the prompt
+        #    (no second, independent retrieval).
+        memories_used = self._load_evidence_memories(context_package)
 
         # 4. Generate grounded agent response
         if memories_used:
@@ -61,6 +58,14 @@ class MemoryAgent:
             "memories_used": memories_used,
             "reflection": reflection_result,
         }
+
+    def _load_evidence_memories(self, context_package) -> list[Memory]:
+        """Load the evidence memories in context rank order (single query)."""
+        ids = [e.memory_id for e in context_package.evidence if e.memory_id is not None]
+        if not ids:
+            return []
+        rows = {m.id: m for m in self.db.query(Memory).filter(Memory.id.in_(ids)).all()}
+        return [rows[mid] for mid in ids if mid in rows]
 
     def chat(self, user_input: str, category: str = "fact") -> dict:
         # 1. Ingest input through Memory Pipeline

@@ -1,12 +1,11 @@
-from app.database import SessionLocal, engine
-from sqlalchemy import text
+from app.testing_support import reset_database
+from app.database import SessionLocal
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.service import create_memory
 from app.relationship_service import create_relationship, get_related_memories
 from app.semantic.semantic_service import generate_embedding
 from app.graph.graph_service import GraphService
 from app.graph.graph_search import GraphSearch
-from app.graph.repository import reset_shared_graph
 from app.retrieval_service import retrieve_memories
 from app.decision.decision_types import MemoryAction
 from app.models import Memory
@@ -14,12 +13,7 @@ from app.models_relationship import MemoryRelationship
 
 
 def clear_db():
-    """Clear database and reset shared KnowledgeGraph state for test isolation."""
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
-    reset_shared_graph()
+    reset_database()
 
 
 def test_shared_graph_state_across_instances():

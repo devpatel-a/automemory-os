@@ -1,6 +1,6 @@
-import spacy
 from app.knowledge.fact_models import KnowledgeFact
 from app.understanding.models import ParsedMemory
+from app.nlp import parse_text
 from app.knowledge.temporal_cues import (
     FUTURE_CUES,
     INTENTION_VERB_LEMMAS,
@@ -10,7 +10,6 @@ from app.knowledge.temporal_cues import (
     has_transition_evidence,
 )
 
-nlp = spacy.load("en_core_web_sm")
 
 USER_PRONOUNS = {"i", "me", "my", "myself"}
 RELATION_NOUNS = {
@@ -96,7 +95,7 @@ def extract_fact(memory: ParsedMemory) -> KnowledgeFact | None:
         return None
 
     raw_text = memory.content.strip()
-    doc = nlp(raw_text)
+    doc = parse_text(raw_text)
 
     # 1. Subject & Entity Resolution + Explicit Entity Relationship Extraction
     entity = "user"

@@ -24,6 +24,7 @@ def _int_env(name: str, default: int) -> int:
 class Settings:
     database_url: str
     embedding_model: str
+    spacy_model: str
     context_retrieval_limit: int
     context_token_budget: int
 
@@ -32,6 +33,7 @@ def load_settings() -> Settings:
     return Settings(
         database_url=os.environ.get("DATABASE_URL", "postgresql://localhost/automemory_os"),
         embedding_model=os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+        spacy_model=os.environ.get("SPACY_MODEL", "en_core_web_sm"),
         context_retrieval_limit=_int_env("CONTEXT_RETRIEVAL_LIMIT", 10),
         # Approximate budget in characters (see app/context/token_budget.py)
         context_token_budget=_int_env("CONTEXT_TOKEN_BUDGET", 1200),

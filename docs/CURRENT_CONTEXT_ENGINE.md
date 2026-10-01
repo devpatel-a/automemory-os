@@ -102,3 +102,16 @@ historical queries.
 ### Configuration
 `CONTEXT_RETRIEVAL_LIMIT` (default 10) and `CONTEXT_TOKEN_BUDGET` (default 1200
 characters) come from `app/config.py`.
+
+---
+
+## v0.10
+
+- `build_context(db, query, limit=None)`: `limit` caps the selection. The agent
+  passes `top_k`, and its `memories_used` are exactly `package.evidence`.
+- `ContextEvidence.signals` exposes each candidate's independently measured
+  signals (semantic, lexical, graph, entity, attribute, temporal, final, ...).
+- Historical lineage covers `superseded_by` and `fulfilled_by`. A fulfilled plan
+  is effectively HISTORICAL but gets no historical-alignment bonus (it was a
+  plan, not a past state).
+- Matching of entities, categories and temporal words is whole-word.

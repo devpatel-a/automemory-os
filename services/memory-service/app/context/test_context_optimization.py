@@ -1,20 +1,15 @@
+from app.testing_support import reset_database
 from datetime import UTC, datetime, timedelta
-from app.database import SessionLocal, engine
-from sqlalchemy import text
+from app.database import SessionLocal
 from app.models import Memory
 from app.semantic.semantic_service import generate_embedding
 from app.context.context_engine import ContextEngine
-from app.graph.repository import reset_shared_graph
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.service import contradict_existing_memory, merge_existing_memories
 
 
 def clear_db():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
-    reset_shared_graph()
+    reset_database()
 
 
 # ==========================================

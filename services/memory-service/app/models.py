@@ -1,8 +1,27 @@
-from sqlalchemy import Integer, String, Float, Text, DateTime
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func as sa_func,
+    literal_column,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from .database import Base
+
+# Vector dimension of memories.embedding. Changing it requires a migration;
+# the configured embedding model must produce vectors of this size
+# (validated at startup, see app/startup.py).
+EMBEDDING_DIMENSION = 384
+
+
+MEMORY_STATES = ("active", "weak", "archived")
 
 
 class Memory(Base):
@@ -17,7 +36,7 @@ class Memory(Base):
     importance: Mapped[float] = mapped_column(Float, default=0.5)
 
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(384),
+        Vector(EMBEDDING_DIMENSION),
         nullable=True,
     )
 
@@ -26,6 +45,7 @@ class Memory(Base):
     state: Mapped[str] = mapped_column(
         String(20),
         default="active",
+        index=True,
     )
 
     confidence: Mapped[float] = mapped_column(
@@ -35,7 +55,9 @@ class Memory(Base):
 
     contradicted_by_id: Mapped[int | None] = mapped_column(
         Integer,
+        ForeignKey("memories.id", ondelete="SET NULL", name="fk_memories_contradicted_by"),
         nullable=True,
+        index=True,
     )
 
     created_at: Mapped[DateTime] = mapped_column(
@@ -50,4 +72,29 @@ class Memory(Base):
 
     is_contradicted: Mapped[bool] = mapped_column(
         default=False
+    )
+
+    # Optimistic concurrency: bumped by every semantic mutation (see
+    # app/service.py bump_version). Evolution re-checks it after row locking.
+    version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default="1",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('active', 'weak', 'archived')",
+            name="ck_memories_state",
+        ),
+        CheckConstraint(
+            "contradicted_by_id IS NULL OR contradicted_by_id <> id",
+            name="ck_memories_not_self_contradicted",
+        ),
+        # Lexical retrieval (PostgreSQL full-text search)
+        Index(
+            "ix_memories_content_fts",
+            sa_func.to_tsvector(literal_column("'english'"), literal_column("content")),
+            postgresql_using="gin",
+        ),
     )

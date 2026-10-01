@@ -1,5 +1,5 @@
-from app.database import SessionLocal, engine
-from sqlalchemy import text
+from app.testing_support import reset_database
+from app.database import SessionLocal
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.service import create_memory, update_existing_fact_memory
 from app.relationship_service import create_relationship, get_related_memories
@@ -7,10 +7,7 @@ from app.decision.decision_types import MemoryAction
 
 
 def clear_db():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
+    reset_database()
 
 
 def test_memory_evolution_update_workflow():

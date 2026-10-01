@@ -65,7 +65,7 @@
 - Resolves explicit entity relationships (`relationship_to_user = "friend"` for `"My friend Rahul"`).
 
 ### 3. Candidate Retrieval
-- Fetches top candidates from PostgreSQL via semantic embeddings (`pgvector` cosine distance) and keyword matching (`ILIKE`).
+- Fetches top live candidates from PostgreSQL via semantic embeddings (`pgvector` cosine distance); archived memories are excluded at the source.
 
 ### 4. Knowledge Classification & Decision
 - Evaluates incoming fact against candidate memories using the v0.8 decision matrix.
@@ -74,7 +74,7 @@
 ### 5. Memory Evolution & Knowledge Graph
 - **SUPERSESSION**: Creates a new active memory record for the current fact, preserves the existing memory in PostgreSQL (`state = "active"`), and links supersession lineage in `MemoryRelationship` (`relationship_type = "superseded_by"`).
 - **CONTRADICTION**: Archives conflicting current claims without transition evidence (`state = "archived"`, `is_contradicted = True`).
-- Updates thread-safe process-shared Knowledge Graph.
+- Persists entities, memory links and typed relationships to the PostgreSQL graph and appends a provenance record, in the same transaction as the evolution.
 
 ### 6. Hybrid Retrieval & Context Assembly
 - `ContextEngine` identifies query temporal intent (`CURRENT`, `HISTORICAL`, `FUTURE`).

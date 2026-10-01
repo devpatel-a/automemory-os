@@ -1,23 +1,18 @@
+from app.testing_support import reset_database
 """
 Lifecycle safety regressions: archiving must be an explicit evolution decision
 (merge / contradiction), never a side effect of reinforcement or access decay.
 """
 
-from sqlalchemy import text
 
-from app.database import SessionLocal, engine
+from app.database import SessionLocal
 from app.models import Memory
-from app.graph.repository import reset_shared_graph
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.service import decay_memory, update_memory_state
 
 
 def clear_db():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
-    reset_shared_graph()
+    reset_database()
 
 
 def test_decay_never_archives():

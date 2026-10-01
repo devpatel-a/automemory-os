@@ -1,11 +1,11 @@
 from app.config import settings
-from app.retrieval_service import retrieve_memories
+from app.retrieval_service import retrieve_candidates
 from app.context.models import ContextCandidate
 from app.context.query_entities import extract_query_entities
 from app.context.evidence_evaluator import evaluate_evidence
 from app.context.conflict_resolver import resolve_conflicts
 from app.context.query_intent import HISTORICAL, analyze_query
-from app.models_relationship import MemoryRelationship
+from app.lineage import historical_memory_ids
 from app.context.ranker import rank_candidates
 from app.context.diversity import diversify_candidates
 from app.context.token_budget import optimize_token_budget
@@ -31,7 +31,15 @@ class ContextEngine:
         self,
         db,
         query: str,
+        limit: int | None = None,
     ):
+        """
+        Build the final ContextPackage. `limit` caps how many memories are
+        selected (defaults to CONTEXT_RETRIEVAL_LIMIT). The package's
+        evidence is the single source of truth for what a downstream
+        prompt/agent may use.
+        """
+        selection_limit = min(limit, settings.context_retrieval_limit) if limit else settings.context_retrieval_limit
         if not query or not query.strip():
             return assemble_context(query=query, candidates=[])
 
@@ -41,7 +49,7 @@ class ContextEngine:
         historical = intent.temporal_intent == HISTORICAL
 
         # 2. Hybrid Candidate Retrieval (passes include_archived=historical)
-        results = retrieve_memories(
+        results = retrieve_candidates(
             db=db,
             query=query,
             limit=settings.context_retrieval_limit,
@@ -51,13 +59,16 @@ class ContextEngine:
         if not results:
             return assemble_context(query=query, candidates=[], intent=intent)
 
-        # 3. Candidate Pool & Initial Wrapping
+        # 3. Candidate Pool & Initial Wrapping (similarity = hybrid retrieval
+        #    score, kept for backward compatibility; see .retrieval for signals)
         raw_candidates = [
             ContextCandidate(
-                memory=memory,
-                similarity=similarity,
+                memory=rc.memory,
+                similarity=rc.retrieval_score,
+                retrieval=rc,
+                explanation=[f"retrieval: {', '.join(rc.reasons) or 'ranked'}"],
             )
-            for memory, similarity in results
+            for rc in results
         ]
 
         # 4. Evidence Evaluation (Zero hardcoded domain rules)
@@ -74,17 +85,26 @@ class ContextEngine:
         resolved_candidates = resolve_conflicts(
             candidates=evaluated_candidates,
             query=query,
-            superseded_ids=load_superseded_ids(db, [c.memory.id for c in evaluated_candidates]),
+            superseded_ids=historical_memory_ids(db, [c.memory.id for c in evaluated_candidates]),
         )
 
         # 5b. Temporal intent alignment
         for c in resolved_candidates:
-            if c.temporal_state and c.temporal_state == intent.temporal_intent:
+            if is_completed_plan(c):
+                # A fulfilled plan is history *as a plan*: it never answers a
+                # future question, but its value was never a past state either.
+                c.explanation.append("temporal_alignment: skipped (fulfilled plan)")
+            elif c.temporal_state and c.temporal_state == intent.temporal_intent:
                 c.evidence_score += TEMPORAL_ALIGNMENT_BONUS
                 c.score = c.evidence_score
                 c.explanation.append(
                     f"temporal_alignment ({intent.temporal_intent}): +{TEMPORAL_ALIGNMENT_BONUS:.3f}"
                 )
+                if c.retrieval is not None:
+                    c.retrieval.temporal_score = (c.retrieval.temporal_score or 0.0) + TEMPORAL_ALIGNMENT_BONUS
+            if c.retrieval is not None:
+                c.retrieval.temporal_state = c.temporal_state
+                c.retrieval.final_score = c.evidence_score
 
         # 6. Context Re-ranking
         ranked = rank_candidates(resolved_candidates)
@@ -92,7 +112,7 @@ class ContextEngine:
         # 7. Near-Duplicate Diversity Optimization
         diversified = diversify_candidates(
             ranked,
-            limit=settings.context_retrieval_limit,
+            limit=selection_limit,
         )
 
         # 8. Token Budget Optimization
@@ -109,17 +129,15 @@ class ContextEngine:
         )
 
 
-def load_superseded_ids(db, memory_ids: list[int]) -> set[int]:
-    """IDs among memory_ids that have a 'superseded_by' lineage link (single query)."""
-    ids = [mid for mid in memory_ids if mid is not None]
-    if not ids:
-        return set()
-    rows = (
-        db.query(MemoryRelationship.source_memory_id)
-        .filter(
-            MemoryRelationship.relationship_type == "superseded_by",
-            MemoryRelationship.source_memory_id.in_(ids),
-        )
-        .all()
+def is_completed_plan(candidate) -> bool:
+    """A stored FUTURE fact whose effective state became HISTORICAL through lineage."""
+    return (
+        candidate.fact is not None
+        and candidate.fact.temporal_state == "FUTURE"
+        and candidate.temporal_state == "HISTORICAL"
     )
-    return {row[0] for row in rows}
+
+
+def load_superseded_ids(db, memory_ids: list[int]) -> set[int]:
+    """Backward-compatible alias: ids with historical lineage (superseded/fulfilled)."""
+    return historical_memory_ids(db, memory_ids)

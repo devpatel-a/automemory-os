@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from . import service
 from .database import get_db
 from .context_service import build_context
-from .context.context_engine import ContextEngine
 from .agent_service import MemoryAgent
 from .pipeline.memory_pipeline import MemoryPipeline
 from .schemas import (
@@ -13,7 +12,9 @@ from .schemas import (
     MemoryResponse,
     AgentQueryRequest,
     AgentQueryResponse,
+    MemoryEvidenceResponse,
 )
+from .provenance.models import Provenance
 
 router = APIRouter()
 
@@ -46,8 +47,26 @@ def create_memory(
     result = pipeline.process(
         content=memory.content,
         category=memory.category,
+        provenance=Provenance(
+            source_type=memory.source_type,
+            conversation_id=memory.conversation_id,
+            message_id=memory.message_id,
+            observed_at=memory.observed_at,
+        ),
     )
     return result["memory"]
+
+
+@router.get(
+    "/memory/{memory_id}/evidence",
+    response_model=MemoryEvidenceResponse,
+)
+def get_memory_evidence(
+    memory_id: int,
+    db: Session = Depends(get_db),
+):
+    """Provenance and lineage for one memory (read-only)."""
+    return service.get_memory_evidence(memory_id, db=db)
 
 
 @router.put(
@@ -57,16 +76,25 @@ def create_memory(
 def update_memory(
     memory_id: int,
     memory: MemoryUpdate,
+    db: Session = Depends(get_db),
 ):
+    """Administrative text correction with locking, provenance and graph rebuild."""
     return service.update_memory(
         memory_id=memory_id,
         content=memory.content,
+        db=db,
+        expected_version=memory.expected_version,
     )
 
 
 @router.delete("/memory/{memory_id}")
-def delete_memory(memory_id: int):
-    return service.delete_memory(memory_id)
+def delete_memory(
+    memory_id: int,
+    purge: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Archive (default, non-destructive) or, with purge=true, permanently delete."""
+    return service.delete_memory(memory_id, db=db, purge=purge)
 
 
 @router.get(
@@ -119,12 +147,20 @@ def agent_chat(
 def process_pipeline(
     content: str,
     category: str = "fact",
+    source_type: str = "api",
+    conversation_id: str | None = None,
+    message_id: str | None = None,
     db: Session = Depends(get_db),
 ):
     pipeline = MemoryPipeline(db)
     result = pipeline.process(
         content=content,
         category=category,
+        provenance=Provenance(
+            source_type=source_type,
+            conversation_id=conversation_id,
+            message_id=message_id,
+        ),
     )
     return {
         "memory_id": result["memory"].id,
@@ -133,4 +169,6 @@ def process_pipeline(
         "intent": result["parsed"].intent,
         "action": result["decision"].action.value,
         "reason": result["decision"].reason,
+        "knowledge_decision": result["knowledge"].decision.value,
+        "reason_codes": result["reason_codes"],
     }

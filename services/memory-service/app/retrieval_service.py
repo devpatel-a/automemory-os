@@ -1,17 +1,21 @@
 from app.semantic.semantic_service import generate_embedding, semantic_search
-from app.ranking_service import compute_hybrid_rank_score, STOP_WORDS
-from app.graph.graph_service import GraphService
-from app.graph.graph_search import GraphSearch
-from app.context.query_entities import extract_query_entities
+from app.ranking_service import compute_hybrid_signals, weighted_hybrid_score
+from app.retrieval_models import RetrievalCandidate
+from app.lexical import fts_match_any, query_terms
+from app.graph.sql_repository import SqlGraphRepository
 from app.models import Memory
 
+# Bounded candidate pools per retrieval signal
+SEMANTIC_CANDIDATE_LIMIT = 20
+LEXICAL_CANDIDATE_LIMIT = 30
 
-def retrieve_memories(
+
+def retrieve_candidates(
     db,
     query: str,
     limit: int = 5,
     include_archived: bool = False,
-):
+) -> list[RetrievalCandidate]:
     """
     Central Hybrid Retrieval API with Candidate Fusion & Multi-Signal Feature Ranking.
 
@@ -32,8 +36,9 @@ def retrieve_memories(
     semantic_results = semantic_search(
         db=db,
         query=query,
-        limit=20,
+        limit=SEMANTIC_CANDIDATE_LIMIT,
         query_embedding=query_emb,
+        include_archived=include_archived,
     )
 
     for memory, distance in semantic_results:
@@ -44,59 +49,22 @@ def retrieve_memories(
             "graph_connected": False,
         }
 
-    # 2. Keyword Search
-    words = [
-        w.strip(".,!?\"'").lower()
-        for w in query.split()
-        if w.strip(".,!?\"'").lower() not in STOP_WORDS
-        and len(w.strip(".,!?\"'")) > 1
-    ]
-    if not words:
-        words = [
-            w.strip(".,!?\"'").lower()
-            for w in query.split()
-            if len(w.strip(".,!?\"'")) > 1
-        ]
-
+    # 2. Lexical Search (PostgreSQL full-text search on whole words:
+    #    "car" matches "cars", never "career" / "scary" / "carpool")
+    terms = query_terms(query)
     keyword_mids = set()
-    if words:
-        for word in words[:3]:
-            q = db.query(Memory.id)
-            if not include_archived:
-                q = q.filter(Memory.state != "archived")
-            kw_mems = (
-                q.filter(Memory.content.ilike(f"%{word}%"))
-                .limit(10)
-                .all()
-            )
-            for row in kw_mems:
-                mid = row[0]
-                keyword_mids.add(mid)
-                if mid in candidate_map:
-                    candidate_map[mid]["keyword_matched"] = True
+    if terms:
+        q = db.query(Memory.id).filter(fts_match_any(Memory.content, terms))
+        if not include_archived:
+            q = q.filter(Memory.state != "archived")
+        for (mid,) in q.limit(LEXICAL_CANDIDATE_LIMIT).all():
+            keyword_mids.add(mid)
+            if mid in candidate_map:
+                candidate_map[mid]["keyword_matched"] = True
 
-    # 3. Knowledge Graph Expansion (Robust entity & term matching)
-    graph_service = GraphService()
-    kg = graph_service.repository.load()
-    graph_search = GraphSearch(nodes=kg.nodes, edges=kg.edges)
-
-    query_entities = extract_query_entities(query)
-    graph_terms = set()
-    for entity in query_entities:
-        ent_text = entity.text if hasattr(entity, "text") else str(entity)
-        if ent_text and ent_text.strip():
-            graph_terms.add(ent_text.strip().lower())
-
-    # Include non-stopword query terms for robust graph candidate discovery
-    for raw_term in query.split():
-        clean_term = raw_term.strip(".,!?\"'").lower()
-        if clean_term and clean_term not in STOP_WORDS and len(clean_term) > 1:
-            graph_terms.add(clean_term)
-
-    graph_mids = set()
-    for term in graph_terms:
-        matched = graph_search.memory_ids(term)
-        graph_mids.update(matched)
+    # 3. Knowledge Graph Expansion (persistent graph, conservative entity resolution:
+    #    exact normalized names / explicit aliases, longest span first)
+    graph_mids = SqlGraphRepository(db).memory_ids_for_query(query)
 
     for mid in graph_mids:
         if mid in candidate_map:
@@ -119,7 +87,7 @@ def retrieve_memories(
             }
 
     # 5. Feature Scoring & Filtering
-    ranked = []
+    candidates = []
     for item in candidate_map.values():
         memory = item["memory"]
 
@@ -127,16 +95,54 @@ def retrieve_memories(
         if not include_archived and getattr(memory, "state", None) == "archived":
             continue
 
-        score = compute_hybrid_rank_score(
+        signals = compute_hybrid_signals(
             memory=memory,
             semantic_distance=item["semantic_distance"],
-            keyword_matched=item["keyword_matched"],
             graph_connected=item["graph_connected"],
             query=query,
         )
+        score = weighted_hybrid_score(signals, bool(getattr(memory, "is_contradicted", False)))
 
-        ranked.append((memory, score))
+        reasons = []
+        if item["semantic_distance"] is not None:
+            reasons.append("semantic_match")
+        if item["keyword_matched"]:
+            reasons.append("lexical_match")
+        if item["graph_connected"]:
+            reasons.append("graph_entity_match")
+        if getattr(memory, "state", None) == "archived":
+            reasons.append("archived_included_for_history")
+
+        candidates.append(RetrievalCandidate(
+            memory=memory,
+            memory_id=memory.id,
+            semantic_score=signals["semantic"],
+            lexical_score=signals["lexical"],
+            graph_score=signals["graph"],
+            importance=signals["importance"],
+            recency=signals["recency"],
+            access_frequency=signals["access"],
+            category_score=signals["category"],
+            retrieval_score=score,
+            confidence=getattr(memory, "confidence", None),
+            lifecycle_state=getattr(memory, "state", None),
+            final_score=score,
+            reasons=reasons,
+        ))
 
     # 6. Final Ranking
-    ranked.sort(key=lambda x: x[1], reverse=True)
-    return ranked[:limit]
+    candidates.sort(key=lambda c: c.final_score, reverse=True)
+    return candidates[:limit]
+
+
+def retrieve_memories(
+    db,
+    query: str,
+    limit: int = 5,
+    include_archived: bool = False,
+):
+    """Backward-compatible API: [(Memory, hybrid score)] (see retrieve_candidates)."""
+    return [
+        (c.memory, c.final_score)
+        for c in retrieve_candidates(db, query, limit=limit, include_archived=include_archived)
+    ]

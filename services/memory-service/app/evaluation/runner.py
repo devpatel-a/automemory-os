@@ -30,7 +30,8 @@ from app.evaluation.metrics import (
     reciprocal_rank,
 )
 from app.evaluation.scenarios import EXTRACTION_CASES, SCENARIOS, Scenario
-from app.graph.repository import GraphRepository, reset_shared_graph
+from app.graph.repository import reset_shared_graph
+from app.graph.sql_repository import SqlGraphRepository
 from app.knowledge.fact_extractor import extract_fact
 from app.models import Memory
 from app.models_relationship import MemoryRelationship
@@ -75,6 +76,10 @@ def isolated_session():
         expire_on_commit=False,
     )
     try:
+        session.execute(text("DELETE FROM entity_relationships"))
+        session.execute(text("DELETE FROM memory_entities"))
+        session.execute(text("DELETE FROM entity_aliases"))
+        session.execute(text("DELETE FROM entities"))
         session.execute(text("DELETE FROM memory_relationships"))
         session.execute(text("DELETE FROM memories"))
         reset_shared_graph()
@@ -164,7 +169,7 @@ def run_scenario(scenario: Scenario, k: int = DEFAULT_K) -> ScenarioResult:
         result.superseded_predicted = sorted(_lineage_pairs(db, "superseded_by"))
         result.contradicted_predicted = sorted(_contradiction_pairs(db))
 
-        graph = GraphRepository().load()
+        graph = SqlGraphRepository(db).load()  # persisted graph (source of truth)
         edges = {(e.source.lower(), e.relationship.lower(), e.target.lower()) for e in graph.edges}
         for edge in scenario.edges_present:
             result.edge_checks_total += 1

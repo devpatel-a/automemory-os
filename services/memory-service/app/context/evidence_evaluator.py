@@ -78,6 +78,12 @@ def evaluate_evidence(
         + temp_bonus
     )
 
+    if candidate.retrieval is not None:
+        candidate.retrieval.entity_score = ent_bonus
+        candidate.retrieval.attribute_score = fact_bonus
+        candidate.retrieval.temporal_score = temp_bonus
+        candidate.retrieval.final_score = final_evidence_score
+
     candidate.score = final_evidence_score
     candidate.evidence_score = final_evidence_score
     candidate.explanation = explanation

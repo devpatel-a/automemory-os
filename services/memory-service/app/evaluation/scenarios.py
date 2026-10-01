@@ -8,7 +8,7 @@ supersession pairs), graph edges and duplicate suppression against labels.
 Labels refer to memories by their exact statement text.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -78,6 +78,20 @@ SCENARIOS: tuple[Scenario, ...] = (
             ("I lived in Delhi.", "I live in Mumbai."),
             ("I live in Mumbai.", "I moved to Pune."),
         ),
+    ),
+    Scenario(
+        name="plan_fulfilment",
+        statements=(
+            ("I live in Pune.", "profile"),
+            ("I planned to move to Bangalore.", "profile"),
+            ("I moved to Bangalore.", "profile"),
+        ),
+        queries=(
+            QueryCase("Where do I live?", ("I moved to Bangalore.",),
+                      forbidden=("I planned to move to Bangalore.", "I live in Pune.")),
+            QueryCase("Where did I live before?", ("I live in Pune.",)),
+        ),
+        superseded=(("I live in Pune.", "I moved to Bangalore."),),
     ),
     Scenario(
         name="residence_contradiction",

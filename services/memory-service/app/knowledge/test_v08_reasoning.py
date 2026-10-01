@@ -1,5 +1,5 @@
-from app.database import SessionLocal, engine
-from sqlalchemy import text
+from app.testing_support import reset_database
+from app.database import SessionLocal
 from app.models import Memory
 from app.models_relationship import MemoryRelationship
 from app.understanding.memory_parser import parse_memory
@@ -10,16 +10,11 @@ from app.knowledge.knowledge_types import KnowledgeDecision
 from app.decision.decision_types import MemoryAction
 from app.pipeline.memory_pipeline import MemoryPipeline
 from app.graph.graph_service import GraphService
-from app.graph.repository import reset_shared_graph
 from app.context.context_engine import ContextEngine
 
 
 def clear_db():
-    with engine.connect() as conn:
-        conn.execute(text("DELETE FROM memory_relationships;"))
-        conn.execute(text("DELETE FROM memories;"))
-        conn.commit()
-    reset_shared_graph()
+    reset_database()
 
 
 def get_memory_temporal_state(db, memory: Memory) -> str:

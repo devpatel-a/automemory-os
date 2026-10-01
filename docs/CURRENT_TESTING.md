@@ -6,8 +6,19 @@ The AutoMemory OS test suite validates system correctness across unit, integrati
 
 ### Verification Command
 ```bash
+cd services/memory-service
+createdb automemory_os_test
+export DATABASE_URL=postgresql://USER@HOST/automemory_os_test
+export AUTOMEMORY_TEST_DATABASE=automemory_os_test
 python -m pytest -q
 ```
+
+> The suite deletes data, so it **refuses to run** (exit code 4) unless the
+> database is named `<name>_test` (regex `^[a-z0-9_]+_test$`) **and**
+> `AUTOMEMORY_TEST_DATABASE` equals that name (`app/testing_support.py`,
+> `conftest.py`). A name that merely contains "test" is rejected. The
+> destructive helpers (`reset_database()`, `prepare_test_schema()`) check this
+> themselves. The session migrates the test database with `alembic upgrade head`.
 
 ### Final Verified Results (v0.8 Milestone)
 - **Collected**: 116 tests
@@ -66,3 +77,32 @@ New suites:
 - `app/context/test_query_aware_context.py`: query intent, lineage, structured evidence.
 - `app/evaluation/test_benchmark.py`: metric unit tests and the benchmark regression gate (see `EVALUATION.md`).
 - `app/test_config.py`: typed settings.
+
+---
+
+## v0.10 Results
+- **Collected**: 254 tests. **Passed**: 254. **Failed**: 0.
+- All v0.8/v0.9 tests pass with their assertions unchanged (their
+  `clear_db()` helpers now delegate to the guarded `reset_database()`).
+
+New suites:
+- `app/test_startup_validation.py`: pinned spaCy model, actionable missing-model error, embedding dimension (384 valid, 768 rejected), live DB column dimension.
+- `app/test_database_safety.py`: test-DB guard, including an end-to-end subprocess run against `automemory_os`.
+- `app/test_migrations.py`: fresh-DB upgrade equals ORM metadata, downgrade/upgrade round trip, legacy `create_all` DB with anomalous data upgrades without loss, legacy provenance backfill.
+- `app/test_database_constraints.py`: FK/unique/CHECK/cascade behavior enforced by PostgreSQL.
+- `app/pipeline/test_pipeline_evolution.py`: one handler per decision; contradiction target resolved / resolved by wide search / unresolvable; multiple candidates; re-assertion; atomic rollback.
+- `app/pipeline/test_concurrency.py`: concurrent duplicate insert, contradiction, re-assertion, relationship creation, plus a deterministic lost-update interleaving.
+- `app/test_retrieval_lifecycle.py`, `app/test_retrieval_candidates.py`, `app/test_lexical_matching.py`.
+- `app/test_agent_context_consistency.py`: agent `memories_used` == ContextPackage evidence.
+- `app/graph/test_persistent_graph.py`: restart (new process), shared across services, entity safety, aliases, rollback, concurrency.
+- `app/understanding/test_generic_entities.py`: unseen entities, no curated list.
+- `app/test_admin_reads.py`, `app/provenance/test_provenance.py`, `app/knowledge/test_temporal_matrix.py`, `app/test_parse_cache.py`.
+
+---
+
+## v0.10.1 Results (pre-merge hardening)
+- **Collected**: 285 tests. **Passed**: 285. **Failed**: 0. **Skipped**: 0 (two consecutive full runs).
+- New: `app/pipeline/test_stale_target.py` (stale classification, bounded retry,
+  phantom conflicting inserts, reflection lost update), `app/test_admin_mutations.py`
+  (PUT), `app/test_delete_semantics.py` (archive vs. purge, FK integrity),
+  stronger `app/test_database_safety.py`, 0005 checks in `app/test_migrations.py`.
