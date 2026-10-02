@@ -18,7 +18,7 @@ from sqlalchemy.sql import func, text
 from app.database import Base
 
 # Bump when extraction rules change so evidence records which rules produced a fact.
-EXTRACTOR_VERSION = "deterministic-nlp-0.10"
+EXTRACTOR_VERSION = "deterministic-nlp-0.11"
 DETERMINISTIC_NLP = "deterministic_nlp"
 LEGACY_SOURCE = "legacy"
 

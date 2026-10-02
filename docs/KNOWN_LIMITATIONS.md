@@ -56,8 +56,12 @@ AutoMemory OS intentionally relies on deterministic NLP algorithms, explicit dep
   transaction as pipeline writes and admin edits, and removed on purge. It is
   **not yet authoritative**: evolution, classification and retrieval do not
   read it, so the top-5 limitation still applies. The next stage will
-  evaluate it for structural candidate lookup, after fixing the extraction
-  defects listed in `docs/design/KNOWLEDGE_FACTS_INDEX.md` §2.1.
+  evaluate it for structural candidate lookup. Extraction hardening (§17 of
+  `docs/design/KNOWLEDGE_FACTS_INDEX.md`) fixed the possessive-subject entity
+  and flags placeholder/pronoun/question facts. The classifier does not read
+  those flags yet, so placeholder facts ("I live there.") and questions
+  ("Do I live in Pune?") can still contradict, supersede or merge into real
+  facts in evolution.
 - **Entity identity by name:** two different people who share exactly the same
   name are one entity until an alias/disambiguation mechanism exists
   (resolution never merges *different* names).
