@@ -36,15 +36,18 @@ data. `python -m app.init_db` is equivalent to `alembic upgrade head`.
 | `0003_knowledge_graph` | `entities`, `entity_aliases`, `memory_entities`, `entity_relationships` |
 | `0004_memory_evidence` | provenance (`memory_evidence`), legacy rows backfilled as `source_type='legacy'` |
 | `0005_memory_version` | `memories.version` (optimistic concurrency, existing rows = 1), `memory_evidence.previous_text` |
-| `0006_knowledge_facts` | `knowledge_facts` shadow index (schema only; populate with `reindex`, below) |
+| `0006_knowledge_facts` | `knowledge_facts` derived fact index (schema only; populate with `reindex`, below) |
 
 Rollback: `alembic downgrade -1` (each revision has a downgrade; downgrading
 0003/0004 drops graph/provenance data).
 
 ### Structural fact index (`knowledge_facts`)
 
-The index is derived from `memories.content` and is not yet used for
-decisions. New and edited memories are indexed automatically. Existing
+The index is derived from `memories.content`. Evolution uses it only to
+*discover* candidates in the incoming fact's domain. Each candidate is
+re-validated against its memory, and the classifier decides as before. New and
+edited memories are indexed automatically. A missing row only loses
+structural recall (semantic discovery still applies) until `reindex` repairs it. Existing
 databases need an explicit backfill after `alembic upgrade head`; the
 migration does not run the NLP model:
 
@@ -66,6 +69,7 @@ and never modifies memories, evidence, lineage or graph data.
 | `SPACY_MODEL` | `en_core_web_sm` | Must be installed |
 | `CONTEXT_RETRIEVAL_LIMIT` | `10` | Candidates per context build |
 | `CONTEXT_TOKEN_BUDGET` | `1200` | Context budget (characters) |
+| `STRUCTURAL_CANDIDATE_LIMIT` | `50` | Live memories examined per fact domain by evolution's structural candidate discovery; `0` disables it |
 
 ## API additions (backward compatible)
 

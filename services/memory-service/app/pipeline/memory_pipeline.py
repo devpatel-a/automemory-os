@@ -20,7 +20,8 @@ from app.service import (
 from app import lineage
 from app.lineage import historical_memory_ids
 from app.knowledge.fact_extractor import extract_fact
-from app.knowledge.fact_index import sync_memory_fact
+from app.config import settings
+from app.knowledge.fact_index import structural_candidates, sync_memory_fact
 from app.models import Memory
 from app.semantic.semantic_service import generate_embedding, semantic_search
 from app.understanding.memory_parser import parse_memory
@@ -43,6 +44,9 @@ logger = logging.getLogger(__name__)
 # resolve a contradiction target the classifier did not pin down.
 CANDIDATE_LIMIT = 5
 WIDE_CONTRADICTION_SEARCH_LIMIT = 50
+# Live memories examined per fact domain by structural discovery
+# (knowledge_facts); 0 = semantic discovery only.
+STRUCTURAL_CANDIDATE_LIMIT = settings.structural_candidate_limit
 
 # Attempts before giving up when concurrent writers keep changing the target.
 MAX_ATTEMPTS = 3
@@ -167,12 +171,11 @@ class MemoryPipeline:
         # Serialize classification + write for statements about the same
         # (entity, attribute): no concurrent statement can change the state
         # this classification reasons about before it is applied.
-        lock_fact_domains(self.db, [extract_fact(parsed_memory)])
+        fact = extract_fact(parsed_memory)
+        lock_fact_domains(self.db, [fact])
 
         self.db.expire_all()
-        candidates = semantic_search(
-            self.db, content, limit=CANDIDATE_LIMIT, query_embedding=embedding,
-        )
+        candidates, lookup_reasons = self._discover_candidates(content, embedding, fact)
         by_id = {get_memory_object(c).id: get_memory_object(c) for c in candidates}
         # Versions the classification is based on; re-verified after row locking.
         self._classified_versions = {mid: m.version for mid, m in by_id.items()}
@@ -192,14 +195,16 @@ class MemoryPipeline:
             historical=historical,
             target=target,
         )
-        evolution.reason_codes = list(knowledge.reason_codes) + evolution.reason_codes
+        if knowledge.target_memory_id in self._structural_only:
+            lookup_reasons.append("structural_candidate:%d" % knowledge.target_memory_id)
+        evolution.reason_codes = list(knowledge.reason_codes) + lookup_reasons + evolution.reason_codes
         evolution.reason_codes += self._link_fulfilled_plans(
             evolution.memory, knowledge.fact, candidates, historical,
         )
 
-        # Shadow fact index (derived from evolution.memory's current content), in
-        # the same transaction. Every handler returns the memory whose content
-        # it wrote; other touched memories keep their content. Not read here.
+        # Fact index (derived from evolution.memory's current content), in the
+        # same transaction. Every handler returns the memory whose content it
+        # wrote; other touched memories keep their content.
         sync_memory_fact(self.db, evolution.memory)
 
         # Provenance: append-only evidence for the memory this statement produced/affected
@@ -314,6 +319,32 @@ class MemoryPipeline:
         return _Evolution(memory, reasons)
 
     # --------------------------------------------------------------- helpers
+
+    def _discover_candidates(self, content, embedding, fact):
+        """
+        Semantic top-CANDIDATE_LIMIT, in its ranking order, followed by the
+        structural candidates (knowledge_facts, canonically validated) that
+        semantic search did not return, as (memory, None): no distance, so the
+        distance-based rules keep using the best semantic candidate.
+
+        Runs under the fact-domain lock, so no pipeline statement in this
+        domain changes these memories or their index rows until the write.
+        """
+        semantic = semantic_search(
+            self.db, content, limit=CANDIDATE_LIMIT, query_embedding=embedding,
+        )
+        semantic_ids = {get_memory_object(c).id for c in semantic}
+        lookup = structural_candidates(self.db, fact, STRUCTURAL_CANDIDATE_LIMIT)
+        extras = [(m, None) for m in lookup.memories if m.id not in semantic_ids]
+
+        # Candidate sources, for reason codes and debugging.
+        self._candidate_sources = {mid: {"semantic"} for mid in semantic_ids}
+        for m in lookup.memories:
+            self._candidate_sources.setdefault(m.id, set()).add("structural")
+        self._structural_only = {m.id for m, _ in extras}
+
+        reasons = ["structural_candidates_truncated"] if lookup.truncated else []
+        return list(semantic) + extras, reasons
 
     def _record_evidence(self, evolution, knowledge, content, provenance) -> None:
         provenance = provenance or Provenance()

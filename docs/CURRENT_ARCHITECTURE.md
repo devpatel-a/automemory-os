@@ -114,7 +114,7 @@ A historical fact (`temporal_state = "HISTORICAL"`) remains in an `active` `Memo
 - **Temporal cues** live in `app/knowledge/temporal_cues.py` and match whole
   words only.
 - **Configuration:** `app/config.py` (`DATABASE_URL`, `EMBEDDING_MODEL`,
-  `CONTEXT_RETRIEVAL_LIMIT`, `CONTEXT_TOKEN_BUDGET`).
+  `CONTEXT_RETRIEVAL_LIMIT`, `CONTEXT_TOKEN_BUDGET`, `STRUCTURAL_CANDIDATE_LIMIT`).
 - **Audit and gap analysis:** `ARCHITECTURE_ASSESSMENT.md`. **Measurement:** `EVALUATION.md`.
 
 ---
@@ -133,10 +133,41 @@ A historical fact (`temporal_state = "HISTORICAL"`) remains in an `active` `Memo
 
 ---
 
-## v0.11 (in progress): `knowledge_facts` shadow index
+## v0.11 (in progress): `knowledge_facts` index and structural candidate discovery
 
 A derived, rebuildable index of each memory's structured fact (`knowledge_facts`,
 migration 0006). `memories.content` remains the source of truth. Lifecycle and
 lineage are not copied into the index. It is written in the same transaction
-as content changes, but **not yet used** by evolution, classification or
-retrieval. Design: `docs/design/KNOWLEDGE_FACTS_INDEX.md`.
+as content changes (pipeline writes and admin PUT; purge cascades).
+Design: `docs/design/KNOWLEDGE_FACTS_INDEX.md` (§18 for Section 2).
+
+**Evolution candidates (Section 2)** are the union of two discovery paths,
+inside the existing fact-domain advisory lock:
+
+1. semantic: the top `CANDIDATE_LIMIT` (5) by embedding distance, unchanged
+   and first, in ranking order;
+2. structural (`fact_index.structural_candidates`): live memories whose index
+   row is in the incoming fact's domain, (entity, attribute) for single-valued
+   attributes and (entity, attribute, value) for multi-valued ones; newest
+   first, at most `STRUCTURAL_CANDIDATE_LIMIT` (default 50, `0` disables).
+
+Each memory appears once. Structural-only candidates carry no distance, so the
+distance-based rules still use the best semantic candidate.
+
+What stays authoritative:
+- Lifecycle and lineage come from `memories` and `memory_relationships`. The
+  lookup excludes archived, contradicted, superseded and fulfilled memories.
+- Every structural nominee is re-derived from its current content and dropped
+  if that content is not in the domain, so a stale or poisoned row cannot
+  nominate an unrelated memory.
+- The unchanged classifier decides; the versions of all candidates are
+  snapshotted, and `_lock_live` revalidates the target as before.
+
+Safety behaviour:
+- Placeholder and question statements do no structural lookup, and placeholder
+  rows are never nominated.
+- If more than the limit match, the newest are examined, a warning is logged
+  and the `structural_candidates_truncated` reason code is recorded.
+- A target found only structurally adds `structural_candidate:<id>` to the
+  reason codes and evidence.
+- Retrieval and context assembly do not use the index.

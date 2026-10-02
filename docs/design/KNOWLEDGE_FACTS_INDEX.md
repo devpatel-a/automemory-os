@@ -270,6 +270,7 @@ candidates = semantic + [m for m in structural+plans if m.id not in semantic]   
   candidate. With the union, ordering decides which conflicting memory is
   targeted when legacy data already holds several. Proposal: semantic order,
   then structural by `memory_id DESC` (most recent assertion).
+  **Settled (§18):** as proposed.
 
 ### 6.2 Safety model (unchanged)
 
@@ -567,3 +568,87 @@ Still open, since each needs classifier decision logic (out of scope here):
 placeholder facts can still contradict or supersede real values; a question
 can still MERGE into the matching statement and rewrite its text; a pronoun
 subject ("We live in Pune.") can still reinforce the user's fact.
+
+---
+
+## 18. Section 2: structural + semantic candidate discovery (PR-3 as implemented)
+
+**Where.** `MemoryPipeline._evolve` → `_discover_candidates`, after
+`lock_fact_domains` and `expire_all`, both unchanged. The lookup is
+`fact_index.structural_candidates(db, fact, STRUCTURAL_CANDIDATE_LIMIT)`.
+
+**Lookup** (one SQL query, using `ix_knowledge_facts_domain_value`):
+- `knowledge_facts` is joined to `memories`, with
+  `NOT EXISTS memory_relationships(superseded_by | fulfilled_by)`.
+- It excludes placeholder rows, `state = 'archived'`, `is_contradicted` and
+  historical lineage. Lifecycle and lineage come from the canonical tables,
+  never from the index.
+- Single-valued attributes match on `(entity_key, attribute_key)`: every value
+  can conflict, supersede or be negated.
+- Multi-valued attributes match on `(entity_key, attribute_key, value_key)`:
+  only the same value can merge, reinforce, be negated or fulfil a plan.
+- Rows are ordered `memory_id DESC` with `LIMIT n + 1`. One row beyond the
+  limit sets `truncated`.
+- There is no lookup for a missing attribute, `NO_ATTRIBUTE`, a placeholder
+  or a question fact, or for a limit of 0.
+
+**Canonical validation.** Each nominee's *current* `memories.content` is
+re-derived (`derive_fact_row`). The nominee is kept only if that content gives
+a non-placeholder fact in the same domain (and, for multi-valued attributes,
+the same value). Rejected ids are logged with a pointer to `reindex`. A stale
+row whose content is still in the domain is used, since the content decides.
+A poisoned row pointing at an unrelated memory is dropped.
+
+**Union.** The classifier receives:
+- the semantic top-`CANDIDATE_LIMIT`, unchanged and first, in ranking order;
+- then each structural candidate not already among them, as `(memory, None)`.
+
+Why the order matters:
+- `live[0]`, and therefore the distance-based REINFORCEMENT/RELATED tail,
+  stays the best semantic candidate.
+- `is_merge_equivalent` decides a validated structural candidate on its facts
+  alone, without distance or the token-overlap fallback.
+- When every semantic candidate is historical and a structural one is live,
+  the decision is still NEW. The reason code is `no_semantic_distance`
+  instead of `only_historical_candidates`.
+
+The classifier, handlers, wide contradiction fallback and fulfilled-plan
+linking are unchanged. They see more candidates, never different rules.
+
+**Concurrency.**
+- The lookup runs under the incoming fact's domain advisory lock. Every
+  structural nominee is in that domain (validated), and every pipeline write
+  or admin PUT in that domain takes the same lock.
+- Versions of all union members go into `_classified_versions`. A concurrent
+  archive (row lock only) or out-of-band edit between lookup and write makes
+  `_lock_live` raise `EvolutionConflict`. The evolution then retries from
+  fresh state, up to `MAX_ATTEMPTS`.
+- The lookup itself takes no locks, so no new lock-ordering edge exists.
+
+**Recovery.**
+- A missing row loses only structural recall; semantic discovery still applies.
+- A stale or poisoned row is neutralised by canonical validation.
+- `check` reports both; `reindex` repairs them.
+- `STRUCTURAL_CANDIDATE_LIMIT=0` returns to semantic-only discovery without a
+  deploy rollback.
+
+**Reason codes** (also in `memory_evidence.reason_codes`):
+- `structural_candidate:<id>`: the decision's target was found only structurally.
+- `structural_candidates_truncated`: the domain had more live members than
+  the limit.
+
+**Tests.** `app/pipeline/test_structural_candidates.py`:
+- the top-5 regression and its control with discovery disabled;
+- decision parity between near (semantic) and far (structural) targets for
+  contradiction, supersession, Rule B, single- and multi-valued negation and
+  employer;
+- temporal non-targeting, far plan fulfilment, and superseded memories;
+- the union and its ordering, determinism and the limit, and the multi-valued
+  exact-value lookup;
+- placeholder and question exclusion;
+- index integrity: missing, stale and poisoned rows;
+- concurrency: stale edit, archive, and concurrent conflicting statements.
+
+The PR-1 test "evolution never reads the index" is replaced by "reads it
+only via SELECT, writes it only via sync". The poisoned/empty-index
+decision-parity test is kept unchanged and passes.

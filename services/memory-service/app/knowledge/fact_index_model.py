@@ -10,8 +10,9 @@ Deliberately NOT stored: lifecycle (state, contradiction) or lineage
 `memory_relationships` and are joined at query time, so this table can never
 become a second source of truth for memory state.
 
-Shadow index (PR-1): written and checked, but NOT read by evolution,
-classification or retrieval yet.
+Read by evolution only to DISCOVER candidates (fact_index.structural_candidates),
+each re-validated against its memory; never read by retrieval, never a
+decision input on its own.
 """
 
 from sqlalchemy import (

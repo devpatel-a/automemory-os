@@ -20,6 +20,12 @@ def _int_env(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
 
 
+def _non_negative(value: int, name: str) -> int:
+    if value < 0:
+        raise ValueError(f"{name} must be >= 0, got {value}")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -27,6 +33,7 @@ class Settings:
     spacy_model: str
     context_retrieval_limit: int
     context_token_budget: int
+    structural_candidate_limit: int
 
 
 def load_settings() -> Settings:
@@ -37,6 +44,11 @@ def load_settings() -> Settings:
         context_retrieval_limit=_int_env("CONTEXT_RETRIEVAL_LIMIT", 10),
         # Approximate budget in characters (see app/context/token_budget.py)
         context_token_budget=_int_env("CONTEXT_TOKEN_BUDGET", 1200),
+        # Live memories examined per fact domain by evolution's structural
+        # candidate discovery (knowledge_facts); 0 disables it (semantic only).
+        structural_candidate_limit=_non_negative(
+            _int_env("STRUCTURAL_CANDIDATE_LIMIT", 50), "STRUCTURAL_CANDIDATE_LIMIT",
+        ),
     )
 
 
