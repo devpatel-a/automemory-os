@@ -1,7 +1,8 @@
 """
-knowledge_facts shadow index (PR-1): derived from memories.content, kept in
-sync in the same transaction as content changes, rebuildable, and NOT read by
-evolution/classification.
+knowledge_facts index (PR-1): derived from memories.content, kept in sync in
+the same transaction as content changes, rebuildable. Evolution reads it only
+for candidate discovery (Section 2, see app/pipeline/test_structural_candidates.py);
+decisions never depend on index contents alone.
 """
 
 import threading
@@ -348,7 +349,7 @@ def test_at_most_one_row_per_memory(db):
     db.rollback()
 
 
-# ------------------------------------------------- not consulted (shadow)
+# ------------------------------------- discovery only, never a decision
 
 def _statements_touching_facts(run):
     seen = []
@@ -365,15 +366,18 @@ def _statements_touching_facts(run):
     return seen
 
 
-def test_evolution_never_reads_the_fact_index(db):
+def test_evolution_reads_the_fact_index_only_for_candidate_discovery(db):
+    # Section 2: evolution SELECTs candidates from the index; the index is
+    # still written only by sync_memory_fact (INSERT ... ON CONFLICT / DELETE).
     ingest(db, "I live in Mumbai.")
     pipeline = MemoryPipeline(db)
     statements = _statements_touching_facts(lambda: [
         pipeline.process(s, "profile")
         for s in ("I live in Pune.", "I moved to Delhi.", "I live in Delhi.", "I like tea.", "I will move to Goa.")
     ])
-    assert statements, "the pipeline must write the shadow index"
-    assert set(statements) <= {"INSERT", "DELETE"}, statements
+    assert "INSERT" in statements, "the pipeline must write the index"
+    assert "SELECT" in statements, "evolution must consult the index for candidates"
+    assert set(statements) <= {"SELECT", "INSERT", "DELETE"}, statements
 
 
 def test_evolution_decisions_do_not_depend_on_the_fact_index(db):

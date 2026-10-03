@@ -8,9 +8,13 @@ shadow index (design: docs/design/KNOWLEDGE_FACTS_INDEX.md, PR-1).
   flushed inside the CALLER's transaction (never commits).
 - `reindex(...)` / `check(...)`: explicit rebuild/backfill and audit utilities.
 
-The index is NOT read by evolution, classification or retrieval in this
-stage. `lookup_fact_rows` exists for tests and the next stage; it excludes
-placeholder facts, as the design requires.
+- `structural_candidates(db, fact, limit)`: evolution's structural candidate
+  discovery. The index only NOMINATES memories; each one is re-validated
+  against its canonical row (lifecycle, lineage and current content) before
+  it is returned, and the classifier decides as before.
+
+Retrieval and context assembly do not read the index. `lookup_fact_rows`
+(tests/diagnostics) excludes placeholder facts, as the design requires.
 
 CLI (from services/memory-service):
     python -m app.knowledge.fact_index reindex [--all] [--batch-size N]
@@ -20,18 +24,24 @@ CLI (from services/memory-service):
 import argparse
 import hashlib
 import json
+import logging
 import sys
+from dataclasses import dataclass, field
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.knowledge.attribute_schema import is_single_valued
 from app.knowledge.fact_extractor import NO_ATTRIBUTE, extract_fact
 from app.knowledge.fact_index_model import KnowledgeFactRow
+from app.lineage import HISTORICAL_LINEAGE_TYPES
 from app.models import Memory
+from app.models_relationship import MemoryRelationship
 from app.provenance.models import EXTRACTOR_VERSION
 from app.understanding.memory_parser import parse_memory
+
+logger = logging.getLogger(__name__)
 
 KEY_LIMITS = {"entity_key": 255, "attribute_key": 128, "value_key": 255}
 
@@ -110,8 +120,9 @@ def lookup_fact_rows(
 ) -> list[KnowledgeFactRow]:
     """
     Fact rows for (entity, attribute[, value]) using the composite index.
-    Placeholder facts are excluded unless explicitly requested.
-    NOT used by evolution/classification in this stage.
+    Placeholder facts are excluded unless explicitly requested. Raw index
+    rows, without canonical validation: tests and diagnostics only (evolution
+    uses structural_candidates).
     """
     q = db.query(KnowledgeFactRow).filter(
         KnowledgeFactRow.entity_key == fact_key(entity),
@@ -122,6 +133,104 @@ def lookup_fact_rows(
     if not include_placeholders:
         q = q.filter(KnowledgeFactRow.is_placeholder.is_(False))
     return q.order_by(KnowledgeFactRow.memory_id).all()
+
+
+# ------------------------------------------------- structural candidates
+
+@dataclass
+class StructuralLookup:
+    """Validated structural candidates for one incoming fact."""
+
+    memories: list[Memory] = field(default_factory=list)
+    # More rows matched than the limit; the oldest were not examined.
+    truncated: bool = False
+    # Index rows whose canonical memory no longer supports them (stale/poisoned).
+    rejected_ids: list[int] = field(default_factory=list)
+
+
+def structural_candidates(db: Session, fact, limit: int) -> StructuralLookup:
+    """
+    Live memories whose indexed fact is in the incoming fact's domain:
+    (entity, attribute) for single-valued attributes, where every value can
+    conflict; (entity, attribute, value) for multi-valued ones, where only the
+    same value can merge, reinforce, be negated or fulfil a plan.
+
+    Discovery only, never a decision:
+    - nothing is looked up for a missing/placeholder/question fact or limit <= 0;
+    - placeholder rows are excluded;
+    - lifecycle and lineage come from the canonical tables, not the index:
+      archived, contradicted and historical-lineage (superseded_by /
+      fulfilled_by) memories are excluded, exactly the memories evolution
+      never acts on;
+    - every nominated memory is re-derived from its CURRENT content and kept
+      only if that content still places it in the domain, so a stale or
+      poisoned row can never put an unrelated memory in front of the classifier;
+    - deterministic: newest memory first; at most `limit` rows are examined and
+      `truncated` reports when more matched.
+    A memory whose row is missing is simply not nominated (semantic discovery
+    still applies; `check` / `reindex` repair the index).
+    """
+    lookup = StructuralLookup()
+    if (
+        limit <= 0
+        or fact is None
+        or not fact.attribute
+        or fact.attribute == NO_ATTRIBUTE
+        or fact.is_placeholder
+        or fact.is_question
+    ):
+        return lookup
+
+    entity_key, attribute_key, value_key = fact_key(fact.entity), fact_key(fact.attribute), fact_key(fact.value)
+    single_valued = is_single_valued(fact)
+    historical = exists().where(
+        MemoryRelationship.source_memory_id == Memory.id,
+        MemoryRelationship.relationship_type.in_(HISTORICAL_LINEAGE_TYPES),
+    )
+    q = (
+        db.query(Memory)
+        .join(KnowledgeFactRow, KnowledgeFactRow.memory_id == Memory.id)
+        .filter(
+            KnowledgeFactRow.entity_key == entity_key,
+            KnowledgeFactRow.attribute_key == attribute_key,
+            KnowledgeFactRow.is_placeholder.is_(False),
+            Memory.state != "archived",
+            Memory.is_contradicted.isnot(True),
+            ~historical,
+        )
+    )
+    if not single_valued:
+        q = q.filter(KnowledgeFactRow.value_key == value_key)
+    memories = q.order_by(Memory.id.desc()).limit(limit + 1).all()
+    if len(memories) > limit:
+        lookup.truncated = True
+        memories = memories[:limit]
+
+    for memory in memories:
+        canonical = derive_fact_row(memory.content)
+        if (
+            canonical is not None
+            and not canonical["is_placeholder"]
+            and canonical["entity_key"] == entity_key
+            and canonical["attribute_key"] == attribute_key
+            and (single_valued or canonical["value_key"] == value_key)
+        ):
+            lookup.memories.append(memory)
+        else:
+            lookup.rejected_ids.append(memory.id)
+
+    if lookup.rejected_ids:
+        logger.warning(
+            "knowledge_facts rows not supported by their memory content (stale or "
+            "inconsistent index; run `python -m app.knowledge.fact_index reindex`): %s",
+            lookup.rejected_ids,
+        )
+    if lookup.truncated:
+        logger.warning(
+            "structural candidate limit %d reached for %s|%s; older domain members not examined",
+            limit, entity_key, attribute_key,
+        )
+    return lookup
 
 
 # ------------------------------------------------------------------ rebuild

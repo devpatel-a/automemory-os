@@ -42,26 +42,37 @@ AutoMemory OS intentionally relies on deterministic NLP algorithms, explicit dep
 | Fulfilled plans merged away | **Resolved**: never merged; `fulfilled_by` lineage |
 | Tests share the configured database | **Resolved**: tests refuse non-test databases |
 | Facts re-extracted on every use | **Mitigated**: bounded parse cache (~19x faster context builds); no stored facts table yet |
-| Top-5 evolution candidate pool | **Open**: see below |
+| Top-5 evolution candidate pool | **Resolved for indexed facts** (Section 2): see below |
 
 ## Remaining Limitations (v0.10)
 
-- **Evolution candidate pool:** classification still sees the top-5 semantic
-  neighbours (plus a 50-candidate wide search only to resolve a contradiction
-  target). A conflicting same-attribute fact outside that pool is missed.
-  A stored `knowledge_facts` table with an `(entity, attribute)` index is the fix.
-  **Status:** the `knowledge_facts` table now exists as a **shadow index**. It is
-  derived from `memories.content`, rebuildable
-  (`python -m app.knowledge.fact_index reindex`), kept in sync in the same
-  transaction as pipeline writes and admin edits, and removed on purge. It is
-  **not yet authoritative**: evolution, classification and retrieval do not
-  read it, so the top-5 limitation still applies. The next stage will
-  evaluate it for structural candidate lookup. Extraction hardening (§17 of
-  `docs/design/KNOWLEDGE_FACTS_INDEX.md`) fixed the possessive-subject entity
-  and flags placeholder/pronoun/question facts. The classifier does not read
-  those flags yet, so placeholder facts ("I live there.") and questions
-  ("Do I live in Pune?") can still contradict, supersede or merge into real
-  facts in evolution.
+- **Evolution candidate pool:** classification now sees the semantic top-5
+  **plus** structural candidates from `knowledge_facts`: live memories in the
+  incoming fact's domain, re-validated against their content (Section 2;
+  `docs/design/KNOWLEDGE_FACTS_INDEX.md` §18). A conflicting, superseding,
+  negated or plan-fulfilling fact outside the semantic top-5 is now found;
+  regression tests cover it (`app/pipeline/test_structural_candidates.py`).
+  What is still open:
+  - Statements without a usable fact (no attribute, placeholders such as
+    "I live there.", questions) only get semantic candidates, as before.
+  - A memory whose index row is missing (e.g. a database that was upgraded
+    but not backfilled) is found only semantically until
+    `python -m app.knowledge.fact_index reindex` runs. `check` reports it.
+  - The fact itself must be extracted correctly. A fact phrased so that the
+    extractor gives it a different entity, attribute or value lands in a
+    different domain and is not a structural candidate.
+  - Per statement, the structural lookup examines at most
+    `STRUCTURAL_CANDIDATE_LIMIT` (default 50) live members of the domain,
+    newest first. Beyond that it records `structural_candidates_truncated`.
+    For single-valued attributes this needs > 50 live members (legacy
+    inconsistency or many extracted-past statements). For multi-valued ones it
+    needs > 50 live copies of the same value.
+  - Within the semantic pool the pre-existing classifier behaviour is
+    unchanged: placeholder facts ("I live there.") and questions ("Do I live
+    in Pune?") can still contradict, supersede or merge into a real fact when
+    it is semantically close (classifier work, not done here).
+  - Where several conflicting live values already exist (legacy data), one
+    statement targets one of them (semantic order, then newest structural).
 - **Entity identity by name:** two different people who share exactly the same
   name are one entity until an alias/disambiguation mechanism exists
   (resolution never merges *different* names).
